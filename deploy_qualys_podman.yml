@@ -1,5 +1,5 @@
 ---
-- name: Deploy Qualys Container Sensor in Podman
+- name: Deploy Qualys Container Sensor in Podman (CLI Command Version)
   hosts: all
   become: true
   vars:
@@ -13,23 +13,35 @@
 
   tasks:
     - name: Pull the Qualys Container Sensor image
-      containers.podman.podman_image:
-        name: "{{ qualys_image }}"
-        state: present
+      ansible.builtin.command: "podman pull {{ qualys_image }}"
+      register: pull_result
+      changed_when: "'Copying blob' in pull_result.stdout"
 
-    - name: Run Qualys Container Sensor
-      containers.podman.podman_container:
-        name: "{{ sensor_container_name }}"
-        image: "{{ qualys_image }}"
-        state: started
-        restart_policy: always
-        # Qualys sensor requires privilege to monitor and scan other containers on the host
-        privileged: true
-        network_mode: host
-        env:
-          ACTIVATION_ID: "{{ qualys_activation_id }}"
-          CUSTOMER_ID: "{{ qualys_customer_id }}"
-          POD_URL: "{{ qualys_pod_url }}"
-        volume:
-          - "/var/run/docker.sock:/var/run/docker.sock:ro" # Mount socket to scan container lifecycles
-          - "/sys/fs/cgroup:/sys/fs/cgroup:ro"
+    - name: Check if existing Qualys container sensor is running
+      ansible.builtin.command: "podman ps -a --filter name={{ sensor_container_name }} --format {% raw %}'{{.Names}}'{% endraw %}"
+      register: container_check
+      changed_when: false
+      failed_when: false
+
+    - name: Remove existing Qualys sensor container if it exists
+      ansible.builtin.command: "podman rm -f {{ sensor_container_name }}"
+      when: container_check.stdout == sensor_container_name
+      register: remove_result
+      changed_when: remove_result.rc == 0
+
+    - name: Deploy Qualys Container Sensor container via Podman CLI
+      # Using raw podman run command because containers.podman collection is not installed
+      ansible.builtin.command: >
+        podman run -d
+        --name {{ sensor_container_name }}
+        --restart always
+        --privileged
+        --net=host
+        -v /var/run/docker.sock:/var/run/docker.sock:ro
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro
+        -e ACTIVATION_ID={{ qualys_activation_id }}
+        -e CUSTOMER_ID={{ qualys_customer_id }}
+        -e POD_URL={{ qualys_pod_url }}
+        {{ qualys_image }}
+      register: run_result
+      changed_when: run_result.rc == 0
