@@ -1,0 +1,11 @@
+---
+- name: Perform Standard Package Upgrades
+  hosts: all
+  become: true
+  tasks:
+    - name: Run DNF upgrade for all packages (excluding kernel)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        exclude: "kernel*"
+        update_cache: true

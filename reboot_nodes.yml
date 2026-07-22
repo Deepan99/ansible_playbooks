@@ -1,0 +1,16 @@
+---
+- name: Safe System Reboot and Verification
+  hosts: all
+  become: true
+  tasks:
+    - name: Reboot the server
+      ansible.builtin.reboot:
+        msg: "Reboot initiated by Ansible patch management"
+        connect_timeout: 5
+        reboot_timeout: 600 # Wait up to 10 minutes
+        pre_reboot_delay: 2 # Give it 2 seconds to close connections
+        post_reboot_delay: 30 # Wait 30 seconds after connection is back to allow services to start
+
+    - name: Verify system connection is restored
+      ansible.builtin.wait_for_connection:
+        timeout: 300
