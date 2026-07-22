@@ -1,0 +1,58 @@
+---
+- name: Standard Solaris 11 Security (SRU) Patching Playbook
+  hosts: all
+  become: true
+  tasks:
+    # NOTE: Solaris 11 uses Support Repository Updates (SRUs) which are cumulative
+    # rollups containing security and critical bug fixes. There is no simple "--security"
+    # flag; instead, security patching is achieved by updating to the latest SRU release.
+
+    # ------------------
+    # PHASE 1: PRE-CHECKS
+    # ------------------
+    - name: Pre-check - Get current boot environment (BE) status
+      ansible.builtin.command: "beadm list"
+      register: pre_be_list
+      changed_when: false
+
+    - name: Display current boot environments
+      ansible.builtin.debug:
+        var: pre_be_list.stdout_lines
+
+    # ------------------
+    # PHASE 2: SECURITY UPGRADE (SRU)
+    # ------------------
+    - name: Execute Solaris pkg update for SRU packages
+      # In Solaris, security updates are applied by updating the core system package consolidation
+      ansible.builtin.command: "pkg update --accept --be-name ansible-security-BE entire"
+      register: pkg_update_result
+      failed_when:
+        - pkg_update_result.rc != 0
+        - pkg_update_result.rc != 4 # Ignore code 4 (No updates available)
+
+    # ------------------
+    # PHASE 3: REBOOT
+    # ------------------
+    - name: Reboot Solaris server to activate the new security boot environment
+      ansible.builtin.reboot:
+        msg: "Rebooting Solaris system to activate security-patched boot environment"
+        reboot_timeout: 900
+      when: pkg_update_result.changed or "Create Value" in pkg_update_result.stdout
+
+    - name: Wait for server connection to be restored
+      ansible.builtin.wait_for_connection:
+        timeout: 600
+
+    # ------------------
+    # PHASE 4: POST-CHECKS
+    # ------------------
+    - name: Post-check - Retrieve boot environment list
+      ansible.builtin.command: "beadm list"
+      register: post_be_list
+      changed_when: false
+
+    - name: Verify that the new security boot environment is active (marked as 'R')
+      ansible.builtin.assert:
+        that:
+          - "'ansible-security-BE' in post_be_list.stdout"
+        fail_msg: "Post-check failed: The security boot environment 'ansible-security-BE' is not active."

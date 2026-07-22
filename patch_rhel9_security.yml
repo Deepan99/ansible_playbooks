@@ -1,0 +1,73 @@
+---
+- name: Standard RHEL 9 Security Patching Playbook
+  hosts: all
+  become: true
+  vars:
+    required_space_gb: 5
+    critical_services:
+      - sshd
+
+  tasks:
+    # ------------------
+    # PHASE 1: PRE-CHECKS
+    # ------------------
+    - name: Pre-check - Verify root disk space
+      ansible.builtin.assert:
+        that:
+          - (ansible_facts['mounts'] | selectattr('path', 'equalto', '/') | map(attribute='size_available') | first / 1024 / 1024 / 1024) >= required_space_gb
+        fail_msg: "Pre-check failed: Less than {{ required_space_gb }} GB free space on root (/) partition."
+
+    - name: Pre-check - Verify critical services are running
+      ansible.builtin.service_facts:
+
+    - name: Pre-check - Assert critical services status
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services[item + '.service'] is defined
+          - ansible_facts.services[item + '.service'].state == 'running'
+        fail_msg: "Pre-check failed: Critical service {{ item }} is not running."
+      loop: "{{ critical_services }}"
+
+    # ------------------
+    # PHASE 2: SECURITY PATCHING
+    # ------------------
+    - name: Execute DNF Security-only updates
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        security: true # Enforces security-only patches
+        update_cache: true
+      register: dnf_result
+
+    # ------------------
+    # PHASE 3: REBOOT (Conditional)
+    # ------------------
+    - name: Check if reboot is required (kernel or systemd updated)
+      ansible.builtin.command: "needs-restarting -r"
+      register: reboot_required
+      failed_when: false
+      changed_when: false
+
+    - name: Reboot server if required
+      ansible.builtin.reboot:
+        msg: "Rebooting to apply security updates (Ansible)"
+        reboot_timeout: 600
+      when: reboot_required.rc == 1 or dnf_result.changed
+
+    - name: Wait for server connection to be restored
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    # ------------------
+    # PHASE 4: POST-CHECKS
+    # ------------------
+    - name: Post-check - Retrieve service facts after reboot
+      ansible.builtin.service_facts:
+
+    - name: Post-check - Assert critical services are restored
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services[item + '.service'] is defined
+          - ansible_facts.services[item + '.service'].state == 'running'
+        fail_msg: "Post-check failed: Critical service {{ item }} failed to start after patching."
+      loop: "{{ critical_services }}"
