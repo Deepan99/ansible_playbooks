@@ -1,0 +1,35 @@
+---
+- name: Deploy Qualys Container Sensor in Podman
+  hosts: all
+  become: true
+  vars:
+    qualys_image: "qualys/container-sensor:latest"
+    sensor_container_name: "qualys-container-sensor"
+    
+    # Required Qualys configuration tokens (usually stored in Vault)
+    qualys_activation_id: "PLACEHOLDER_ACTIVATION_ID"
+    qualys_customer_id: "PLACEHOLDER_CUSTOMER_ID"
+    qualys_pod_url: "https://pod.qualys.com"
+
+  tasks:
+    - name: Pull the Qualys Container Sensor image
+      containers.podman.podman_image:
+        name: "{{ qualys_image }}"
+        state: present
+
+    - name: Run Qualys Container Sensor
+      containers.podman.podman_container:
+        name: "{{ sensor_container_name }}"
+        image: "{{ qualys_image }}"
+        state: started
+        restart_policy: always
+        # Qualys sensor requires privilege to monitor and scan other containers on the host
+        privileged: true
+        network_mode: host
+        env:
+          ACTIVATION_ID: "{{ qualys_activation_id }}"
+          CUSTOMER_ID: "{{ qualys_customer_id }}"
+          POD_URL: "{{ qualys_pod_url }}"
+        volume:
+          - "/var/run/docker.sock:/var/run/docker.sock:ro" # Mount socket to scan container lifecycles
+          - "/sys/fs/cgroup:/sys/fs/cgroup:ro"

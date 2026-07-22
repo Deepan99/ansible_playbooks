@@ -1,0 +1,22 @@
+---
+- name: Conditional Solaris 11 Patching based on IPS Repo Status
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if updates are available in Solaris IPS repository
+      ansible.builtin.command: "pkg list -u"
+      register: solaris_check_result
+      # pkg list -u returns 0 if updates are found, 1 if no updates exist, and other codes on error.
+      failed_when: "solaris_check_result.rc not in [0, 1]"
+      changed_when: false
+
+    - name: Apply updates to Solaris 11 if updates exist (rc=0)
+      # pkg update automatically creates a new clone of the boot environment (BE) for safety.
+      ansible.builtin.command: "pkg update --accept"
+      when: solaris_check_result.rc == 0
+      register: solaris_update_result
+
+    - name: Log status when system is already up to date (rc=1)
+      ansible.builtin.debug:
+        msg: "No new packages found in Solaris IPS repo. System is up to date."
+      when: solaris_check_result.rc == 1
