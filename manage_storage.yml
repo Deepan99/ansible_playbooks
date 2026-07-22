@@ -1,0 +1,43 @@
+---
+- name: Manage Disk Partitioning, Filesystems, and Mounts
+  hosts: all
+  become: true
+  vars:
+    # Target block device (e.g., an unformatted extra disk)
+    storage_device: "/dev/sdb"
+    
+    # Mount point details
+    mount_path: "/data"
+    filesystem_type: "xfs" # Recommended default for RHEL 9
+
+  tasks:
+    - name: Create a new primary partition on the disk
+      community.general.parted:
+        device: "{{ storage_device }}"
+        number: 1
+        state: present
+        fs_type: "{{ filesystem_type }}"
+      register: parted_info
+
+    - name: Create XFS filesystem on the new partition
+      # e.g., creates filesystem on /dev/sdb1
+      ansible.builtin.filesystem:
+        fstype: "{{ filesystem_type }}"
+        dev: "{{ storage_device }}1"
+        force: false # Prevents overwriting if filesystem already exists
+
+    - name: Create target mount directory
+      ansible.builtin.file:
+        path: "{{ mount_path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Mount the filesystem and add to /etc/fstab
+      ansible.builtin.mount:
+        path: "{{ mount_path }}"
+        src: "{{ storage_device }}1"
+        fstype: "{{ filesystem_type }}"
+        opts: defaults
+        state: mounted # Mounts the device now and appends configuration to /etc/fstab

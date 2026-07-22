@@ -1,0 +1,43 @@
+---
+- name: Configure SSH Hardening and Sudo Access
+  hosts: all
+  become: true
+  vars:
+    # Group that will receive passwordless sudo permissions
+    sudo_group: "sysadmins"
+
+  tasks:
+    # -----------------
+    # SSH Configuration
+    # -----------------
+    - name: Disable Root Login via SSH
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      register: ssh_root_config
+
+    - name: Disable Password Authentication (Key-based only)
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+      register: ssh_auth_config
+
+    - name: Restart SSH service to apply changes
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+      when: ssh_root_config.changed or ssh_auth_config.changed
+
+    # ------------------
+    # Sudo Configuration
+    # ------------------
+    - name: Allow sudo_group members passwordless sudo access
+      ansible.builtin.copy:
+        content: "%{{ sudo_group }} ALL=(ALL) NOPASSWD: ALL"
+        dest: "/etc/sudoers.d/{{ sudo_group }}"
+        mode: '0440'
+        validate: '/usr/sbin/visudo -cf %s' # Validates sudoers syntax before saving

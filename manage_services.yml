@@ -1,0 +1,35 @@
+---
+- name: Install and Configure Nginx Web Server
+  hosts: all
+  become: true
+  vars:
+    # Service package name and state
+    web_package: "nginx"
+    web_service: "nginx"
+
+  tasks:
+    - name: Install Nginx package (RHEL 9)
+      ansible.builtin.dnf:
+        name: "{{ web_package }}"
+        state: present
+
+    - name: Create a custom landing page
+      ansible.builtin.copy:
+        content: "<h1>Welcome to your RHEL 9 Web Server! Provided by Ansible.</h1>"
+        dest: "/usr/share/nginx/html/index.html"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Allow HTTP traffic through the local firewall
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        state: enabled
+        immediate: true # Applies the rule immediately without requiring a firewalld reload
+
+    - name: Ensure Nginx service is started and enabled at boot
+      ansible.builtin.service:
+        name: "{{ web_service }}"
+        state: started
+        enabled: true

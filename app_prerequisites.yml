@@ -1,0 +1,66 @@
+---
+- name: Configure Application System Prerequisites
+  hosts: all
+  become: true
+  vars:
+    app_user: "appuser"
+    app_group: "appgroup"
+    
+    # Kernel parameters for memory/network optimization (sysctl)
+    sysctl_params:
+      - name: "fs.file-max"
+        value: "2097152"
+      - name: "vm.max_map_count"
+        value: "262144" # Common prerequisite for Elasticsearch/Databases
+
+  tasks:
+    - name: Ensure application group exists
+      ansible.builtin.group:
+        name: "{{ app_group }}"
+        state: present
+
+    - name: Ensure application user exists
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        group: "{{ app_group }}"
+        shell: "/sbin/nologin" # Security best practice: no shell access for service accounts
+        create_home: false
+
+    - name: Install prerequisite development tools and system libraries
+      ansible.builtin.dnf:
+        name:
+          - curl
+          - tar
+          - unzip
+          - git
+          - libtool
+          - make
+        state: present
+
+    - name: Configure sysctl kernel parameters
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: true # Instantly applies kernel changes without reboot
+      loop: "{{ sysctl_params }}"
+
+    - name: Set system security resource limits (ulimits) in limits.conf
+      # Increases file descriptors limit for the app user
+      community.general.pam_limits:
+        domain: "{{ app_user }}"
+        limit_type: "-" # Applies to both soft and hard limits
+        limit_item: nofile
+        value: "65536"
+
+    - name: Create application directories (binary, config, log)
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0750'
+      loop:
+        - "/opt/my_app"
+        - "/etc/my_app"
+        - "/var/log/my_app"

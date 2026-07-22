@@ -1,0 +1,49 @@
+---
+- name: Manage Users and Groups on Target Servers
+  hosts: all
+  become: true
+  vars:
+    # List of groups to ensure exist
+    target_groups:
+      - name: sysadmins
+        gid: 2001
+      - name: developers
+        gid: 2002
+
+    # List of users to manage
+    target_users:
+      - name: alice
+        uid: 1001
+        group: sysadmins
+        groups: "developers,wheel"
+        shell: /bin/bash
+        state: present
+      - name: bob
+        uid: 1002
+        group: developers
+        groups: ""
+        shell: /bin/bash
+        state: present
+      - name: charlie
+        name_to_remove: charlie
+        state: absent # Remove user from the system
+
+  tasks:
+    - name: Ensure target groups exist
+      ansible.builtin.group:
+        name: "{{ item.name }}"
+        gid: "{{ item.gid | default(omit) }}"
+        state: present
+      loop: "{{ target_groups }}"
+
+    - name: Manage user accounts
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        uid: "{{ item.uid | default(omit) }}"
+        group: "{{ item.group | default(omit) }}"
+        groups: "{{ item.groups | default(omit) }}"
+        shell: "{{ item.shell | default('/bin/bash') }}"
+        state: "{{ item.state | default('present') }}"
+        remove: "{{ (item.state == 'absent') | ternary(true, false) }}" # Delete home dir if removing
+      loop: "{{ target_users }}"
+      when: item.state == 'present' or item.state == 'absent'
