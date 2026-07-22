@@ -1,0 +1,99 @@
+---
+- name: Provision RHEL 9 VM in Microsoft Azure
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # Azure Configuration Details (using placeholder values)
+    resource_group: "rg-dev-provisioning"
+    location: "eastus"
+    vm_name: "rhel9-azure-dev-vm"
+    
+    # Minimal VM Size (Azure B1s Free Tier size: 1 vCPU, 1 GB RAM)
+    vm_size: "Standard_B1s"
+    
+    # RHEL 9 OS Image Specification
+    image_publisher: "RedHat"
+    image_offer: "RHEL"
+    image_sku: "9-lvm-gen2"
+    image_version: "latest"
+
+    # Credentials
+    admin_username: "azureuser"
+    ssh_public_key: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQD... placeholder-key"
+
+  tasks:
+    - name: Ensure Resource Group exists
+      azure.azcollection.azure_rm_resourcegroup:
+        name: "{{ resource_group }}"
+        location: "{{ location }}"
+        state: present
+
+    - name: Create Virtual Network (VNet)
+      azure.azcollection.azure_rm_virtualnetwork:
+        resource_group: "{{ resource_group }}"
+        name: "vnet-dev"
+        address_prefixes: "10.0.0.0/16"
+
+    - name: Create Subnet inside VNet
+      azure.azcollection.azure_rm_subnet:
+        resource_group: "{{ resource_group }}"
+        name: "subnet-dev"
+        address_prefix: "10.0.1.0/24"
+        virtual_network: "vnet-dev"
+
+    - name: Create Public IP Address
+      azure.azcollection.azure_rm_publicipaddress:
+        resource_group: "{{ resource_group }}"
+        name: "ip-dev-vm"
+        allocation_method: Static
+
+    - name: Create Network Security Group (NSG) and allow SSH
+      azure.azcollection.azure_rm_securitygroup:
+        resource_group: "{{ resource_group }}"
+        name: "nsg-dev-vm"
+        rules:
+          - name: AllowSSH
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 1001
+            direction: Inbound
+
+    - name: Create Network Interface (NIC)
+      azure.azcollection.azure_rm_networkinterface:
+        resource_group: "{{ resource_group }}"
+        name: "nic-dev-vm"
+        virtual_network: "vnet-dev"
+        subnet: "subnet-dev"
+        public_ip_name: "ip-dev-vm"
+        security_group: "nsg-dev-vm"
+
+    - name: Create Virtual Machine
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ vm_name }}"
+        vm_size: "{{ vm_size }}"
+        admin_username: "{{ admin_username }}"
+        ssh_password_enabled: false
+        ssh_public_keys:
+          - path: "/home/{{ admin_username }}/.ssh/authorized_keys"
+            key_data: "{{ ssh_public_key }}"
+        network_interfaces: "nic-dev-vm"
+        image:
+          publisher: "{{ image_publisher }}"
+          offer: "{{ image_offer }}"
+          sku: "{{ image_sku }}"
+          version: "{{ image_version }}"
+        tags:
+          Environment: Dev
+          Project: Provisioning
+      register: azure_vm_info
+
+    - name: Display Azure VM details
+      ansible.builtin.debug:
+        msg:
+          - "VM Name: {{ vm_name }}"
+          - "Admin Username: {{ admin_username }}"
+          - "Location: {{ location }}"
+          - "Resource Group: {{ resource_group }}"
+          - "State: Provisioned"
