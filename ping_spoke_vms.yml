@@ -1,39 +1,42 @@
 ---
-- name: Zero-Trust ARM Management across ALL Azure Spoke VMs (No SSH / Port 22)
+- name: Zero-Trust ARM API Management across ALL Azure Spoke VMs (No SSH / No CLI)
   hosts: localhost
   connection: local
   gather_facts: no
+  collections:
+    - azure.azcollection
   vars:
     target_resource_group: "rg-spoke-eastus"
 
   tasks:
-    - name: Dynamically discover all VMs in Resource Group via Azure CLI
-      ansible.builtin.command: >
-        az vm list
-        --resource-group {{ target_resource_group }}
-        --query "[].name"
-        -o json
-      register: az_vms_raw
-      changed_when: false
+    - name: Dynamically discover all VMs in Resource Group
+      azure_rm_virtualmachine_info:
+        resource_group: "{{ target_resource_group }}"
+      register: azure_vms
 
-    - name: Parse VM list
-      ansible.builtin.set_fact:
-        vm_list: "{{ az_vms_raw.stdout | from_json }}"
-
-    - name: Execute command on ALL discovered VMs via Azure ARM API
-      ansible.builtin.command: >
-        az vm run-command invoke
-        --resource-group {{ target_resource_group }}
-        --name {{ item }}
-        --command-id RunShellScript
-        --scripts "hostname; uptime; df -h /"
-      loop: "{{ vm_list }}"
+    - name: Execute command on ALL discovered VMs via Direct ARM REST API
+      azure_rm_resource:
+        resource_group: "{{ target_resource_group }}"
+        provider: Compute
+        resource_type: virtualMachines
+        resource_name: "{{ item.name }}"
+        subresource:
+          - type: runCommand
+        api_version: "2023-03-01"
+        method: POST
+        body:
+          commandId: RunShellScript
+          script:
+            - hostname
+            - uptime
+      loop: "{{ azure_vms.vms }}"
+      loop_control:
+        label: "{{ item.name }}"
       register: vm_outputs
-      changed_when: false
 
     - name: Display execution results for each VM
       ansible.builtin.debug:
-        msg: "VM: {{ item.item }} | Output: {{ (item.stdout | from_json).value[0].message }}"
+        msg: "VM: {{ item.item.name }} | Output: {{ item.response.value[0].message }}"
       loop: "{{ vm_outputs.results }}"
       loop_control:
-        label: "{{ item.item }}"
+        label: "{{ item.item.name }}"
