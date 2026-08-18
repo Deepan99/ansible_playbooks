@@ -1,35 +1,39 @@
 ---
-- name: Zero-Trust Management across ALL Azure Spoke VMs (ARM API)
+- name: Zero-Trust ARM Management across ALL Azure Spoke VMs (No SSH / Port 22)
   hosts: localhost
   connection: local
   gather_facts: no
-  collections:
-    - azure.azcollection
   vars:
     target_resource_group: "rg-spoke-eastus"
 
   tasks:
-    - name: Dynamically discover all VMs in Resource Group
-      azure_rm_virtualmachine_info:
-        resource_group: "{{ target_resource_group }}"
-      register: azure_vms
+    - name: Dynamically discover all VMs in Resource Group via Azure CLI
+      ansible.builtin.command: >
+        az vm list
+        --resource-group {{ target_resource_group }}
+        --query "[].name"
+        -o json
+      register: az_vms_raw
+      changed_when: false
 
-    - name: Execute command on ALL discovered VMs in loop
-      azure_rm_virtualmachineruncommand:
-        resource_group: "{{ item.resource_group }}"
-        vm_name: "{{ item.name }}"
-        command_id: RunShellScript
-        script:
-          - hostname
-          - uptime
-      loop: "{{ azure_vms.vms }}"
-      loop_control:
-        label: "{{ item.name }}"
+    - name: Parse VM list
+      ansible.builtin.set_fact:
+        vm_list: "{{ az_vms_raw.stdout | from_json }}"
+
+    - name: Execute command on ALL discovered VMs via Azure ARM API
+      ansible.builtin.command: >
+        az vm run-command invoke
+        --resource-group {{ target_resource_group }}
+        --name {{ item }}
+        --command-id RunShellScript
+        --scripts "hostname; uptime; df -h /"
+      loop: "{{ vm_list }}"
       register: vm_outputs
+      changed_when: false
 
     - name: Display execution results for each VM
       ansible.builtin.debug:
-        msg: "VM: {{ item.item.name }} | Output: {{ item.value[0].message | trim }}"
+        msg: "VM: {{ item.item }} | Output: {{ (item.stdout | from_json).value[0].message }}"
       loop: "{{ vm_outputs.results }}"
       loop_control:
-        label: "{{ item.item.name }}"
+        label: "{{ item.item }}"
