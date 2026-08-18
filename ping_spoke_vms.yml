@@ -1,11 +1,33 @@
 ---
-- name: Verify Connectivity to Azure Spoke VMs
-  hosts: all
+- name: Zero-Trust Management across ALL Azure Spoke VMs (ARM API)
+  hosts: localhost
+  connection: local
   gather_facts: no
-  tasks:
-    - name: Ping target VM
-      ansible.builtin.ping:
+  vars:
+    target_resource_group: "rg-spoke-eastus"
 
-    - name: Print success message
+  tasks:
+    - name: Dynamically discover all VMs in Resource Group
+      azure.azcollection.azure_rm_virtualmachine_info:
+        resource_group: "{{ target_resource_group }}"
+      register: azure_vms
+
+    - name: Execute command on ALL discovered VMs in parallel/loop
+      azure.azcollection.azure_rm_virtualmachineruncommand:
+        resource_group: "{{ item.resource_group }}"
+        vm_name: "{{ item.name }}"
+        command_id: RunShellScript
+        script:
+          - hostname
+          - uptime
+      loop: "{{ azure_vms.vms }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: vm_outputs
+
+    - name: Display execution results for each VM
       ansible.builtin.debug:
-        msg: "Successfully connected to {{ inventory_hostname }} from AAP!"
+        msg: "VM: {{ item.item.name }} | Output: {{ item.value[0].message | trim }}"
+      loop: "{{ vm_outputs.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
