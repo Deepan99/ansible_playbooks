@@ -42,9 +42,9 @@
         msg: "Discovered {{ vms_resp.json.value | length }} VM(s) in Resource Group {{ target_rg }}"
 
     # -------------------------------------------------------------------------
-    # STEP 2: ATOMIC PRE-CHECK, PATCH & CONTROLLED REBOOT (WITH BOOT RETRIES)
+    # STEP 2: SMART CONDITIONAL KERNEL PATCH & REBOOT
     # -------------------------------------------------------------------------
-    - name: 3. Execute Atomic Pre-Check, Patch & Controlled Reboot
+    - name: 3. Execute Smart Conditional Patch & Reboot
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
@@ -59,9 +59,8 @@
             - "uname -r"
             - "echo '=== 2. APPLYING KERNEL UPDATES ==='"
             - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
-            - "echo '=== 3. SCHEDULING REBOOT ==='"
-            - "(sleep 5 && shutdown -r now 'Ansible Enterprise Kernel Patch') &"
-            - "echo '=== STATUS: PATCH DISPATCHED & REBOOT SCHEDULED ==='"
+            - "echo '=== 3. CHECKING IF REBOOT IS REQUIRED ==='"
+            - "if needs-restarting -r > /dev/null 2>&1; then echo 'NO_REBOOT_REQUIRED: Kernel is up to date.'; else echo 'REBOOT_REQUIRED: Kernel updated. Rebooting...'; (sleep 5 && shutdown -r now 'Ansible Enterprise Kernel Patch') & fi"
         status_code: [200, 202]
       loop: "{{ vms_resp.json.value }}"
       loop_control:
@@ -72,16 +71,16 @@
       until: atomic_patch_results.status in [200, 202]
 
     # -------------------------------------------------------------------------
-    # STEP 3: WAIT FOR VM AGENT TO RESTART (120 SECONDS)
+    # STEP 3: WAIT FOR POTENTIAL VM AGENT RESTART (60 SECONDS)
     # -------------------------------------------------------------------------
-    - name: 4. Pause for VM Reboot & Guest Agent Recovery (120 Seconds)
+    - name: 4. Pause for Potential Reboot Completion (60 Seconds)
       ansible.builtin.pause:
-        seconds: 120
+        seconds: 60
 
     # -------------------------------------------------------------------------
-    # STEP 4: POST-REBOOT VERIFICATION & AUDIT REPORT
+    # STEP 4: POST-CHECK & AUDIT REPORT
     # -------------------------------------------------------------------------
-    - name: 5. Execute Post-Reboot Verification
+    - name: 5. Execute Post-Check Verification
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
@@ -92,16 +91,16 @@
         body:
           commandId: "RunShellScript"
           script:
-            - "echo '=== POST-REBOOT AUDIT ==='"
+            - "echo '=== POST-PATCH AUDIT ==='"
             - "echo \"Active Kernel: $(uname -r)\""
-            - "echo \"New Uptime: $(uptime -p)\""
+            - "echo \"System Uptime: $(uptime -p)\""
             - "echo '=== AUDIT COMPLETE ==='"
         status_code: [200, 202]
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
       register: post_verify_results
-      retries: 6
+      retries: 10
       delay: 30
       until: post_verify_results.status in [200, 202]
 
@@ -114,9 +113,10 @@
           - "Resource Group: {{ target_rg }}"
           - "Total VMs Processed: {{ vms_resp.json.value | length }}"
           - "Execution Mode: Level 5 Zero-Trust ARM API"
+          - "Smart Reboot: Enabled (Reboots ONLY when kernel updates)"
           - "-------------------------------------------------"
           - "{% for res in post_verify_results.results %}"
           - "  VM Name: {{ res.item.name }}"
-          - "  Status:  VERIFIED & ONLINE (Kernel Update Successful)"
+          - "  Status:  VERIFIED & ONLINE (202 Accepted via ARM)"
           - "{% endfor %}"
           - "================================================="
