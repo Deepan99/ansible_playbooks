@@ -71,11 +71,11 @@
       until: atomic_patch_results.status in [200, 202]
 
     # -------------------------------------------------------------------------
-    # STEP 3: WAIT FOR POTENTIAL VM AGENT RESTART (60 SECONDS)
+    # STEP 3: WAIT FOR VM REBOOT & AGENT RECOVERY (150 SECONDS)
     # -------------------------------------------------------------------------
-    - name: 4. Pause for Potential Reboot Completion (60 Seconds)
+    - name: 4. Pause for VM Reboot & Guest Agent Recovery (150 Seconds)
       ansible.builtin.pause:
-        seconds: 60
+        seconds: 150
 
     # -------------------------------------------------------------------------
     # STEP 4: POST-CHECK & AUDIT REPORT
@@ -100,8 +100,8 @@
       loop_control:
         label: "{{ item.name }}"
       register: post_verify_results
-      retries: 10
-      delay: 30
+      retries: 5
+      delay: 20
       until: post_verify_results.status in [200, 202]
 
     - name: 6. AUDIT SUMMARY REPORT
