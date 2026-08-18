@@ -1,39 +1,42 @@
 ---
-- name: Zero-Trust Pure HTTPS Management across ALL Azure Spoke VMs (Level 5)
+- name: Production Zero-Trust ARM Management (Zero Hardcoded Secrets)
   hosts: localhost
   connection: local
   gather_facts: no
   vars:
-    subscription_id: "17c3aa03-3446-4356-b8df-227a9834823f"
-    client_id: "101b8997-1fa9-4e2c-aa91-b99e8490e9a1"
-    client_secret: "GD18Q~Ntby6r2uysWAWwAkisRh_sqQ3bcpSRGbKm"
-    tenant_id: "5ca3ed3e-abef-4544-9ab7-7213d76e8d64"
-    resource_group: "rg-spoke-eastus"
+    # Read automatically from AAP Environment Variables supplied by Azure Credential
+    azure_sub_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET') }}"
+    azure_tenant_id: "{{ lookup('env', 'AZURE_TENANT') }}"
+    target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
 
   tasks:
-    - name: 1. Obtain Azure OAuth2 Token via HTTPS
+    - name: 1. Obtain Azure OAuth2 Access Token
       ansible.builtin.uri:
-        url: "https://login.microsoftonline.com/{{ tenant_id }}/oauth2/token"
+        url: "https://login.microsoftonline.com/{{ azure_tenant_id }}/oauth2/token"
         method: POST
         body_format: form-urlencoded
         body:
           grant_type: "client_credentials"
-          client_id: "{{ client_id }}"
-          client_secret: "{{ client_secret }}"
+          client_id: "{{ azure_client_id }}"
+          client_secret: "{{ azure_secret }}"
           resource: "https://management.azure.com/"
       register: token_resp
+      no_log: true # Prevents token leakage in AAP job logs
 
-    - name: 2. Discover all VMs in Resource Group via Azure REST API
+    - name: 2. Discover Spoke VMs in Resource Group
       ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ subscription_id }}/resourceGroups/{{ resource_group }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
         method: GET
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
       register: vms_resp
+      no_log: false
 
-    - name: 3. Execute RunCommand on ALL discovered VMs via Azure ARM API
+    - name: 3. Execute Control-Plane RunCommand across VMs
       ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ subscription_id }}/resourceGroups/{{ resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
@@ -49,9 +52,9 @@
         label: "{{ item.name }}"
       register: run_results
 
-    - name: 4. Display Results for all VMs
+    - name: 4. Audit Execution Results
       ansible.builtin.debug:
-        msg: "VM: {{ item.item.name }} | Status: Execution trigger successful via ARM API"
+        msg: "Target VM: {{ item.item.name }} | Status: Executed via ARM API (200 OK)"
       loop: "{{ run_results.results }}"
       loop_control:
         label: "{{ item.item.name }}"
