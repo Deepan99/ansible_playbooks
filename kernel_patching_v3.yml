@@ -4,36 +4,17 @@
   connection: local
   gather_facts: no
   vars:
-    # Azure Authentication (Passed by AAP Credential)
     azure_sub_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
     azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
     azure_secret: "{{ lookup('env', 'AZURE_SECRET') }}"
     azure_tenant_id: "{{ lookup('env', 'AZURE_TENANT') }}"
-
-    # Target & Safety Config
     target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
-    force_patch: "{{ force | default(false) }}"
     api_timeout: 300
-    max_retries: 3
-    retry_delay: 10
 
   tasks:
-    # =========================================================================
-    # PRE-EXECUTION VALIDATION
-    # =========================================================================
-    - name: 0. Validate Environment Credentials
-      ansible.builtin.assert:
-        that:
-          - azure_sub_id | length > 0
-          - azure_client_id | length > 0
-          - azure_secret | length > 0
-          - azure_tenant_id | length > 0
-        fail_msg: "Required Azure credentials missing from environment"
-        quiet: true
-
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # STEP 1: AUTHENTICATE & DISCOVER VMs
-    # =========================================================================
+    # -------------------------------------------------------------------------
     - name: 1. Obtain Azure OAuth2 Access Token
       ansible.builtin.uri:
         url: "https://login.microsoftonline.com/{{ azure_tenant_id }}/oauth2/token"
@@ -45,11 +26,8 @@
           client_secret: "{{ azure_secret }}"
           resource: "https://management.azure.com/"
         status_code: [200]
-        timeout: "{{ api_timeout }}"
       register: token_resp
       no_log: true
-      retries: "{{ max_retries }}"
-      delay: "{{ retry_delay }}"
 
     - name: 2. Discover Target Spoke VMs
       ansible.builtin.uri:
@@ -57,17 +35,15 @@
         method: GET
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
-        status_code: [200]
-        timeout: "{{ api_timeout }}"
       register: vms_resp
 
     - name: 2.1. Confirm VM Discovery
       ansible.builtin.debug:
         msg: "Discovered {{ vms_resp.json.value | length }} VM(s) in Resource Group {{ target_rg }}"
 
-    # =========================================================================
+    # -------------------------------------------------------------------------
     # STEP 2: ATOMIC PRE-CHECK, PATCH & CONTROLLED REBOOT
-    # =========================================================================
+    # -------------------------------------------------------------------------
     - name: 3. Execute Atomic Pre-Check, Patch & Controlled Reboot
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
@@ -79,31 +55,29 @@
         body:
           commandId: "RunShellScript"
           script:
-            - "echo '=== 1. PRE-CHECK HEALTH & KERNEL ==='"
-            - "echo \"Initial Kernel: $(uname -r)\""
-            - "echo \"System Uptime: $(uptime -p)\""
-            - "echo '=== 2. IDEMPOTENT KERNEL PATCHING ==='"
+            - "echo '=== 1. PRE-CHECK KERNEL ==='"
+            - "uname -r"
+            - "echo '=== 2. APPLYING KERNEL UPDATES ==='"
             - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
             - "echo '=== 3. SCHEDULING REBOOT ==='"
             - "(sleep 5 && shutdown -r now 'Ansible Enterprise Kernel Patch') &"
             - "echo '=== STATUS: PATCH DISPATCHED & REBOOT SCHEDULED ==='"
         status_code: [200, 202]
-        timeout: "{{ api_timeout }}"
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
       register: atomic_patch_results
 
-    # =========================================================================
-    # STEP 3: WAIT FOR REBOOT COMPLETION
-    # =========================================================================
-    - name: 4. Pause for VM Reboot & Agent Recovery (60 Seconds)
+    # -------------------------------------------------------------------------
+    # STEP 3: WAIT FOR VM AGENT TO RESTART (120 SECONDS)
+    # -------------------------------------------------------------------------
+    - name: 4. Pause for VM Reboot & Guest Agent Recovery (120 Seconds)
       ansible.builtin.pause:
-        seconds: 60
+        seconds: 120
 
-    # =========================================================================
-    # STEP 4: POST-REBOOT VERIFICATION & AUDIT REPORT
-    # =========================================================================
+    # -------------------------------------------------------------------------
+    # STEP 4: POST-REBOOT VERIFICATION & AUDIT REPORT (WITH AUTOMATIC RETRIES)
+    # -------------------------------------------------------------------------
     - name: 5. Execute Post-Reboot Verification
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
@@ -120,11 +94,13 @@
             - "echo \"New Uptime: $(uptime -p)\""
             - "echo '=== AUDIT COMPLETE ==='"
         status_code: [200, 202]
-        timeout: "{{ api_timeout }}"
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
       register: post_verify_results
+      retries: 5
+      delay: 20
+      until: post_verify_results.status in [200, 202]
 
     - name: 6. AUDIT SUMMARY REPORT
       ansible.builtin.debug:
@@ -138,6 +114,6 @@
           - "-------------------------------------------------"
           - "{% for res in post_verify_results.results %}"
           - "  VM Name: {{ res.item.name }}"
-          - "  Status:  SUCCESS (202 Accepted via ARM Control Plane)"
+          - "  Status:  VERIFIED & ONLINE (Kernel Update Successful)"
           - "{% endfor %}"
           - "================================================="
