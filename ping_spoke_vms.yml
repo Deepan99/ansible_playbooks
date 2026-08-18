@@ -1,0 +1,11 @@
+---
+- name: Verify Connectivity to Azure Spoke VMs
+  hosts: Azure Cloud Infrastructure
+  gather_facts: no
+  tasks:
+    - name: Ping target VM
+      ansible.builtin.ping:
+
+    - name: Print success message
+      ansible.builtin.debug:
+        msg: "Successfully connected to {{ inventory_hostname }} from AAP!"
