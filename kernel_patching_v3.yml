@@ -1,7 +1,6 @@
 ---
 - name: Enterprise Atomic Kernel Patching & Audit (Level 5 ARM API)
-  hosts: localhost
-  connection: local
+  hosts: all
   gather_facts: yes
   vars:
     # Azure Authentication
