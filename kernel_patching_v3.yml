@@ -42,9 +42,9 @@
         msg: "Discovered {{ vms_resp.json.value | length }} VM(s) in Resource Group {{ target_rg }}"
 
     # -------------------------------------------------------------------------
-    # STEP 2: SMART CONDITIONAL KERNEL PATCH & REBOOT
+    # STEP 2: STRICT IDEMPOTENT PATCHING & CONDITIONAL REBOOT
     # -------------------------------------------------------------------------
-    - name: 3. Execute Smart Conditional Patch & Reboot
+    - name: 3. Execute Strict Idempotent Patch & Conditional Reboot
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
@@ -55,27 +55,35 @@
         body:
           commandId: "RunShellScript"
           script:
-            - "echo '=== 1. PRE-CHECK KERNEL ==='"
-            - "uname -r"
-            - "echo '=== 2. APPLYING KERNEL UPDATES ==='"
+            - "OLD_KERNEL=$(uname -r)"
+            - "echo \"=== CURRENT ACTIVE KERNEL: $OLD_KERNEL ===\""
             - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
-            - "echo '=== 3. CHECKING IF REBOOT IS REQUIRED ==='"
-            - "if needs-restarting -r > /dev/null 2>&1; then echo 'NO_REBOOT_REQUIRED: Kernel is up to date.'; else echo 'REBOOT_REQUIRED: Kernel updated. Rebooting...'; (sleep 5 && shutdown -r now 'Ansible Enterprise Kernel Patch') & fi"
+            - "NEWEST_INSTALLED=$(rpm -q kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}\n' | tail -1)"
+            - "echo \"=== NEWEST INSTALLED KERNEL: $NEWEST_INSTALLED ===\""
+            - "if [ \"$OLD_KERNEL\" != \"$NEWEST_INSTALLED\" ] && ! needs-restarting -r > /dev/null 2>&1; then echo 'REBOOT_REQUIRED: New kernel installed. Rebooting in 5s...'; (sleep 5 && shutdown -r now 'Ansible Kernel Patch Reboot') & else echo 'NO_REBOOT_REQUIRED: System is already on latest kernel. Skipping reboot.'; fi"
         status_code: [200, 202]
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
       register: atomic_patch_results
-      retries: 6
-      delay: 30
-      until: atomic_patch_results.status in [200, 202]
 
     # -------------------------------------------------------------------------
-    # STEP 3: WAIT FOR VM REBOOT & AGENT RECOVERY (150 SECONDS)
+    # STEP 3: SMART VM PROVISIONING STATE WAIT (ZERO GUESSWORK)
     # -------------------------------------------------------------------------
-    - name: 4. Pause for VM Reboot & Guest Agent Recovery (150 Seconds)
-      ansible.builtin.pause:
-        seconds: 150
+    - name: 4. Poll Azure ARM API Until All VMs Reach ProvisioningState Succeeded
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}?api-version=2023-09-01"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+        status_code: [200]
+      loop: "{{ vms_resp.json.value }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: vm_state_resp
+      retries: 15
+      delay: 20
+      until: vm_state_resp.json.properties.provisioningState == "Succeeded"
 
     # -------------------------------------------------------------------------
     # STEP 4: POST-CHECK & AUDIT REPORT
@@ -100,9 +108,6 @@
       loop_control:
         label: "{{ item.name }}"
       register: post_verify_results
-      retries: 5
-      delay: 20
-      until: post_verify_results.status in [200, 202]
 
     - name: 6. AUDIT SUMMARY REPORT
       ansible.builtin.debug:
