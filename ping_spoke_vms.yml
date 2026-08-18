@@ -1,42 +1,57 @@
 ---
-- name: Zero-Trust ARM API Management across ALL Azure Spoke VMs (No SSH / No CLI)
+- name: Zero-Trust Pure HTTPS Management across ALL Azure Spoke VMs (Level 5)
   hosts: localhost
   connection: local
   gather_facts: no
-  collections:
-    - azure.azcollection
   vars:
-    target_resource_group: "rg-spoke-eastus"
+    subscription_id: "17c3aa03-3446-4356-b8df-227a9834823f"
+    client_id: "101b8997-1fa9-4e2c-aa91-b99e8490e9a1"
+    client_secret: "GD18Q~Ntby6r2uysWAWwAkisRh_sqQ3bcpSRGbKm"
+    tenant_id: "5ca3ed3e-abef-4544-9ab7-7213d76e8d64"
+    resource_group: "rg-spoke-eastus"
 
   tasks:
-    - name: Dynamically discover all VMs in Resource Group
-      azure_rm_virtualmachine_info:
-        resource_group: "{{ target_resource_group }}"
-      register: azure_vms
-
-    - name: Execute command on ALL discovered VMs via Direct ARM REST API
-      azure_rm_resource:
-        resource_group: "{{ target_resource_group }}"
-        provider: Compute
-        resource_type: virtualMachines
-        resource_name: "{{ item.name }}"
-        subresource:
-          - type: runCommand
-        api_version: "2023-03-01"
+    - name: 1. Obtain Azure OAuth2 Token via HTTPS
+      ansible.builtin.uri:
+        url: "https://login.microsoftonline.com/{{ tenant_id }}/oauth2/token"
         method: POST
+        body_format: form-urlencoded
         body:
-          commandId: RunShellScript
+          grant_type: "client_credentials"
+          client_id: "{{ client_id }}"
+          client_secret: "{{ client_secret }}"
+          resource: "https://management.azure.com/"
+      register: token_resp
+
+    - name: 2. Discover all VMs in Resource Group via Azure REST API
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ subscription_id }}/resourceGroups/{{ resource_group }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+      register: vms_resp
+
+    - name: 3. Execute RunCommand on ALL discovered VMs via Azure ARM API
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ subscription_id }}/resourceGroups/{{ resource_group }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          commandId: "RunShellScript"
           script:
-            - hostname
-            - uptime
-      loop: "{{ azure_vms.vms }}"
+            - "hostname; uptime"
+        status_code: [200, 202]
+      loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
-      register: vm_outputs
+      register: run_results
 
-    - name: Display execution results for each VM
+    - name: 4. Display Results for all VMs
       ansible.builtin.debug:
-        msg: "VM: {{ item.item.name }} | Output: {{ item.response.value[0].message }}"
-      loop: "{{ vm_outputs.results }}"
+        msg: "VM: {{ item.item.name }} | Status: Execution trigger successful via ARM API"
+      loop: "{{ run_results.results }}"
       loop_control:
         label: "{{ item.item.name }}"
