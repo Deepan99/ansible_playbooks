@@ -3,17 +3,19 @@
   hosts: localhost
   connection: local
   gather_facts: no
+  collections:
+    - azure.azcollection
   vars:
     target_resource_group: "rg-spoke-eastus"
 
   tasks:
     - name: Dynamically discover all VMs in Resource Group
-      azure.azcollection.azure_rm_virtualmachine_info:
+      azure_rm_virtualmachine_info:
         resource_group: "{{ target_resource_group }}"
       register: azure_vms
 
-    - name: Execute command on ALL discovered VMs in parallel/loop
-      azure.azcollection.azure_rm_virtualmachineruncommand:
+    - name: Execute command on ALL discovered VMs in loop
+      azure_rm_virtualmachineruncommand:
         resource_group: "{{ item.resource_group }}"
         vm_name: "{{ item.name }}"
         command_id: RunShellScript
