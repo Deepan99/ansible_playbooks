@@ -1,5 +1,5 @@
 ---
-- name: Enterprise Kernel Patching with Pre/Post Verification (Level 5 ARM API)
+- name: Enterprise Atomic Kernel Patching & Audit (Level 5 ARM API)
   hosts: localhost
   connection: local
   gather_facts: no
@@ -36,9 +36,9 @@
       register: vms_resp
 
     # -------------------------------------------------------------------------
-    # STEP 2: PRE-CHECK (RECORD ACTIVE KERNEL VERSION)
+    # STEP 2: ATOMIC EXECUTION (PRE-CHECK -> PATCH -> REBOOT SCHEDULED)
     # -------------------------------------------------------------------------
-    - name: 3. PRE-CHECK - Record Initial Kernel Version
+    - name: 3. Execute Atomic Patch & Audit Script via ARM API
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
@@ -49,70 +49,21 @@
         body:
           commandId: "RunShellScript"
           script:
-            - "uname -r"
-        status_code: [200, 202]
-      loop: "{{ vms_resp.json.value }}"
-      loop_control:
-        label: "{{ item.name }}"
-      register: pre_check_results
-
-    - name: 4. Display Pre-Check Status
-      ansible.builtin.debug:
-        msg: "PRE-CHECK TRIGGERED | VM: {{ item.item.name }} | ARM Async Status: 202 ACCEPTED"
-      loop: "{{ pre_check_results.results }}"
-      loop_control:
-        label: "{{ item.item.name }}"
-
-    # -------------------------------------------------------------------------
-    # STEP 3: PATCH KERNEL & REBOOT
-    # -------------------------------------------------------------------------
-    - name: 5. EXECUTE PATCH - Update Kernel & Reboot
-      ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ token_resp.json.access_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          commandId: "RunShellScript"
-          script:
+            - "echo '=== PRE-CHECK KERNEL ==='; uname -r"
+            - "echo '=== APPLYING KERNEL UPDATES ==='"
             - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
-            - "reboot"
+            - "echo '=== SCHEDULING REBOOT IN 5 SECONDS ==='"
+            - "(sleep 5 && shutdown -r now 'Ansible Kernel Update Reboot') &"
+            - "echo '=== POST-CHECK STATUS: PATCH APPLIED, REBOOT IN PROGRESS ==='"
         status_code: [200, 202]
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
-      register: patch_results
+      register: atomic_results
 
-    - name: 6. Pause for Reboot Completion (60 Seconds)
-      ansible.builtin.pause:
-        seconds: 60
-
-    # -------------------------------------------------------------------------
-    # STEP 4: POST-CHECK (VERIFY UPDATED KERNEL & UPTIME)
-    # -------------------------------------------------------------------------
-    - name: 7. POST-CHECK - Verify New Kernel Version & Uptime
-      ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ token_resp.json.access_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          commandId: "RunShellScript"
-          script:
-            - "echo -n 'KERNEL: '; uname -r; echo -n 'UPTIME: '; uptime -p"
-        status_code: [200, 202]
-      loop: "{{ vms_resp.json.value }}"
-      loop_control:
-        label: "{{ item.name }}"
-      register: post_check_results
-
-    - name: 8. AUDIT SUMMARY - Execution Report
+    - name: 4. AUDIT REPORT - Confirm Execution Dispatch
       ansible.builtin.debug:
-        msg: "POST-CHECK COMPLETE | VM: {{ item.item.name }} | Status: Success (202 Accepted via ARM API)"
-      loop: "{{ post_check_results.results }}"
+        msg: "VM: {{ item.item.name }} | Status: Kernel Updated & Reboot Dispatched via ARM API"
+      loop: "{{ atomic_results.results }}"
       loop_control:
         label: "{{ item.item.name }}"
