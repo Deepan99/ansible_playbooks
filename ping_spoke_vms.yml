@@ -1,6 +1,6 @@
 ---
 - name: Verify Connectivity to Azure Spoke VMs
-  hosts: Azure_Cloud_Infrastructure
+  hosts: all
   gather_facts: no
   tasks:
     - name: Ping target VM
