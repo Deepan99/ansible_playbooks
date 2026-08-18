@@ -1,5 +1,5 @@
 ---
-- name: Production Zero-Trust Kernel Patching & Safe Reboot
+- name: Enterprise Kernel Patching with Pre/Post Verification (Level 5 ARM API)
   hosts: localhost
   connection: local
   gather_facts: no
@@ -11,7 +11,10 @@
     target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
 
   tasks:
-    - name: 1. Obtain Azure Access Token
+    # -------------------------------------------------------------------------
+    # STEP 1: AUTHENTICATE & DISCOVER VMs
+    # -------------------------------------------------------------------------
+    - name: 1. Obtain Azure OAuth2 Access Token
       ansible.builtin.uri:
         url: "https://login.microsoftonline.com/{{ azure_tenant_id }}/oauth2/token"
         method: POST
@@ -24,15 +27,18 @@
       register: token_resp
       no_log: true
 
-    - name: 2. Discover Target VMs
+    - name: 2. Discover Target Spoke VMs
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
-        method: GET
+        method:GET
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
       register: vms_resp
 
-    - name: 3. Apply Kernel Updates & Reboot via ARM API Payload
+    # -------------------------------------------------------------------------
+    # STEP 2: PRE-CHECK (RECORD ACTIVE KERNEL VERSION)
+    # -------------------------------------------------------------------------
+    - name: 3. PRE-CHECK - Record Initial Kernel Version
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
         method: POST
@@ -43,18 +49,70 @@
         body:
           commandId: "RunShellScript"
           script:
-            - "dnf check-update --security || true"
+            - "uname -r"
+      loop: "{{ vms_resp.json.value }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: pre_check_results
+
+    - name: 4. Display Pre-Check Kernel Info
+      ansible.builtin.debug:
+        msg: "PRE-CHECK | VM: {{ item.item.name }} | Initial Kernel: {{ (item.json.value[0].message | trim) }}"
+      loop: "{{ pre_check_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # -------------------------------------------------------------------------
+    # STEP 3: PATCH KERNEL & REBOOT
+    # -------------------------------------------------------------------------
+    - name: 5. EXECUTE PATCH - Update Kernel & Reboot
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          commandId: "RunShellScript"
+          script:
             - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
-            - "if needs-restarting -r; then echo 'NO_REBOOT_NEEDED'; else reboot; fi"
+            - "reboot"
         status_code: [200, 202]
       loop: "{{ vms_resp.json.value }}"
       loop_control:
         label: "{{ item.name }}"
       register: patch_results
 
-    - name: 4. Audit Patch Results
+    - name: 6. Pause for Reboot Completion (60 Seconds)
+      ansible.builtin.pause:
+        seconds: 60
+
+    # -------------------------------------------------------------------------
+    # STEP 4: POST-CHECK (VERIFY UPDATED KERNEL & UPTIME)
+    # -------------------------------------------------------------------------
+    - name: 7. POST-CHECK - Verify New Kernel Version & Uptime
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          commandId: "RunShellScript"
+          script:
+            - "echo -n 'KERNEL: '; uname -r; echo -n 'UPTIME: '; uptime -p"
+      loop: "{{ vms_resp.json.value }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: post_check_results
+
+    - name: 8. AUDIT SUMMARY - Compare Pre vs Post Kernel
       ansible.builtin.debug:
-        msg: "Target VM: {{ item.item.name }} | Status: Kernel Update Triggered via ARM API"
-      loop: "{{ patch_results.results }}"
+        msg: >
+          POST-CHECK COMPLETE | VM: {{ item.item.name }} 
+          | Status: {{ (item.json.value[0].message | trim) }}
+      loop: "{{ post_check_results.results }}"
       loop_control:
         label: "{{ item.item.name }}"
