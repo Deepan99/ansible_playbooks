@@ -42,7 +42,7 @@
         msg: "Discovered {{ vms_resp.json.value | length }} VM(s) in Resource Group {{ target_rg }}"
 
     # -------------------------------------------------------------------------
-    # STEP 2: ATOMIC PRE-CHECK, PATCH & CONTROLLED REBOOT
+    # STEP 2: ATOMIC PRE-CHECK, PATCH & CONTROLLED REBOOT (WITH BOOT RETRIES)
     # -------------------------------------------------------------------------
     - name: 3. Execute Atomic Pre-Check, Patch & Controlled Reboot
       ansible.builtin.uri:
@@ -67,6 +67,9 @@
       loop_control:
         label: "{{ item.name }}"
       register: atomic_patch_results
+      retries: 6
+      delay: 30
+      until: atomic_patch_results.status in [200, 202]
 
     # -------------------------------------------------------------------------
     # STEP 3: WAIT FOR VM AGENT TO RESTART (120 SECONDS)
@@ -76,7 +79,7 @@
         seconds: 120
 
     # -------------------------------------------------------------------------
-    # STEP 4: POST-REBOOT VERIFICATION & AUDIT REPORT (WITH AUTOMATIC RETRIES)
+    # STEP 4: POST-REBOOT VERIFICATION & AUDIT REPORT
     # -------------------------------------------------------------------------
     - name: 5. Execute Post-Reboot Verification
       ansible.builtin.uri:
@@ -98,8 +101,8 @@
       loop_control:
         label: "{{ item.name }}"
       register: post_verify_results
-      retries: 5
-      delay: 20
+      retries: 6
+      delay: 30
       until: post_verify_results.status in [200, 202]
 
     - name: 6. AUDIT SUMMARY REPORT
