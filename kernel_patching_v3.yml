@@ -2,35 +2,35 @@
 - name: Enterprise Atomic Kernel Patching & Audit (Level 5 ARM API)
   hosts: localhost
   connection: local
-  gather_facts: no
+  gather_facts: yes
   vars:
     # Azure Authentication
     azure_sub_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
     azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
     azure_secret: "{{ lookup('env', 'AZURE_SECRET') }}"
     azure_tenant_id: "{{ lookup('env', 'AZURE_TENANT') }}"
- 
+    
     # Target Configuration
     target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
     target_kernel_version: "{{ kernel_version | default('latest') }}"
- 
+    
     # Safety & Scheduling
     maintenance_window_start: "{{ maint_start | default('22:00') }}"
     maintenance_window_end: "{{ maint_end | default('06:00') }}"
     reboot_delay_minutes: "{{ reboot_delay | default(5) }}"
     force_patch: "{{ force | default(false) }}"
- 
+    
     # Performance & Reliability
     api_timeout: 300
     max_retries: 3
     retry_delay: 10
     async_poll_interval: 30
     async_operation_timeout: 3600
- 
+    
     # Audit & Reporting
     audit_log_path: "{{ audit_log | default('./kernel-patch-audit.log') }}"
     create_snapshot: "{{ snapshot | default(true) }}"
- 
+
   tasks:
     # =========================================================================
     # PRE-EXECUTION VALIDATION
@@ -44,19 +44,24 @@
           - azure_tenant_id | length > 0
         fail_msg: "Required Azure credentials not set in environment variables"
         quiet: true
- 
+
     - name: 0.1. Check Current Time Against Maintenance Window
       ansible.builtin.debug:
         msg: "Maintenance window: {{ maintenance_window_start }} - {{ maintenance_window_end }}"
- 
-    - name: 0.2. Initialize Audit Log
+      
+    - name: 0.2. Set Execution Timestamp
+      ansible.builtin.set_fact:
+        execution_timestamp: "{{ ansible_date_time.iso8601 }}"
+        execution_epoch: "{{ ansible_date_time.epoch }}"
+
+    - name: 0.3. Initialize Audit Log
       ansible.builtin.lineinfile:
         path: "{{ audit_log_path }}"
-        line: "{{ ansible_date_time.iso8601 }} | START | Kernel Patching Initiated for RG: {{ target_rg }}"
+        line: "{{ execution_timestamp }} | START | Kernel Patching Initiated for RG: {{ target_rg }}"
         create: yes
         state: present
       when: audit_log_path is defined
- 
+
     # =========================================================================
     # STEP 1: AUTHENTICATE & DISCOVER VMs
     # =========================================================================
@@ -77,7 +82,7 @@
       retries: "{{ max_retries }}"
       delay: "{{ retry_delay }}"
       until: token_resp.status == 200
- 
+
     - name: 1.1. Validate Token Response
       ansible.builtin.assert:
         that:
@@ -85,7 +90,7 @@
           - token_resp.json.access_token is defined
         fail_msg: "Failed to obtain valid Azure access token"
         quiet: true
- 
+
     - name: 2. Discover Target Spoke VMs
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
@@ -97,7 +102,7 @@
       register: vms_resp
       retries: "{{ max_retries }}"
       delay: "{{ retry_delay }}"
- 
+
     - name: 2.1. Validate VM Discovery
       ansible.builtin.assert:
         that:
@@ -105,11 +110,11 @@
           - vms_resp.json.value | length > 0
         fail_msg: "No VMs found in resource group {{ target_rg }}"
         quiet: true
- 
+
     - name: 2.2. Log Discovered VMs
       ansible.builtin.debug:
         msg: "Discovered {{ vms_resp.json.value | length }} VM(s) in {{ target_rg }}"
- 
+
     # =========================================================================
     # STEP 2: PRE-PATCH HEALTH CHECKS
     # =========================================================================
@@ -140,20 +145,20 @@
       async: "{{ async_operation_timeout }}"
       poll: "{{ async_poll_interval }}"
       retries: "{{ max_retries }}"
- 
+
     - name: 3.1. Log Health Check Results
       ansible.builtin.debug:
         msg: "VM: {{ item.item.name }} | Health Check: {{ 'PASSED' if item.status == 200 else 'FAILED' }}"
       loop: "{{ health_check_results.results }}"
       loop_control:
         label: "{{ item.item.name }}"
- 
+
     # =========================================================================
     # STEP 3: CREATE SNAPSHOTS (Rollback Safety)
     # =========================================================================
     - name: 4. Create VM Snapshots for Rollback Safety
       ansible.builtin.uri:
-        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/snapshots/{{ item.name }}-kernel-patch-{{ ansible_date_time.epoch }}?api-version=2023-09-01"
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/snapshots/{{ item.name }}-kernel-patch-{{ execution_epoch }}?api-version=2023-09-01"
         method: PUT
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
@@ -170,7 +175,7 @@
       when: create_snapshot | bool
       async: "{{ async_operation_timeout }}"
       poll: "{{ async_poll_interval }}"
- 
+
     - name: 4.1. Log Snapshot Creation
       ansible.builtin.debug:
         msg: "VM: {{ item.item.name }} | Snapshot: {{ 'CREATED' if item.status in [200, 201, 202] else 'FAILED' }}"
@@ -178,7 +183,7 @@
       loop_control:
         label: "{{ item.item.name }}"
       when: create_snapshot | bool
- 
+
     # =========================================================================
     # STEP 4: ATOMIC KERNEL PATCHING WITH IDEMPOTENCY
     # =========================================================================
@@ -234,7 +239,7 @@
       async: "{{ async_operation_timeout }}"
       poll: "{{ async_poll_interval }}"
       retries: "{{ max_retries }}"
- 
+
     # =========================================================================
     # STEP 5: POLL FOR ASYNC OPERATION COMPLETION
     # =========================================================================
@@ -254,7 +259,7 @@
       retries: 60
       delay: "{{ async_poll_interval }}"
       when: item.async_status_url is defined
- 
+
     # =========================================================================
     # STEP 6: POST-REBOOT VERIFICATION
     # =========================================================================
@@ -273,7 +278,7 @@
       retries: 30
       delay: 60
       until: vm_instance_status.json.instanceView.statuses | selectattr('code', 'equalto', 'PowerState/running') | list | length > 0
- 
+
     - name: 7.1. Execute Post-Reboot Verification
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
@@ -298,7 +303,7 @@
       register: post_reboot_verification
       retries: "{{ max_retries }}"
       delay: "{{ retry_delay }}"
- 
+
     # =========================================================================
     # STEP 7: COMPREHENSIVE AUDIT REPORT
     # =========================================================================
@@ -308,7 +313,7 @@
           - "=== ENTERPRISE KERNEL PATCHING AUDIT REPORT ==="
           - "Resource Group: {{ target_rg }}"
           - "Subscription ID: {{ azure_sub_id }}"
-          - "Execution Time: {{ ansible_date_time.iso8601 }}"
+          - "Execution Time: {{ execution_timestamp }}"
           - "Total VMs Processed: {{ vms_resp.json.value | length }}"
           - ""
           - "VM Details:"
@@ -328,14 +333,14 @@
           - "  Force Patch: {{ force_patch }}"
           - ""
           - "=== END AUDIT REPORT ==="
- 
+
     - name: 8.1. Append to Audit Log
       ansible.builtin.lineinfile:
         path: "{{ audit_log_path }}"
-        line: "{{ ansible_date_time.iso8601 }} | COMPLETE | Kernel Patching Completed for {{ vms_resp.json.value | length }} VM(s) in {{ target_rg }}"
+        line: "{{ execution_timestamp }} | COMPLETE | Kernel Patching Completed for {{ vms_resp.json.value | length }} VM(s) in {{ target_rg }}"
         state: present
       when: audit_log_path is defined
- 
+
     # =========================================================================
     # STEP 8: CLEANUP (Optional Snapshot Removal)
     # =========================================================================
@@ -350,8 +355,7 @@
       loop: "{{ old_snapshots | default([]) }}"
       when: cleanup_old_snapshots | default(false) | bool
       ignore_errors: true
- 
+
     - name: 10. Final Status Summary
       ansible.builtin.debug:
         msg: "Enterprise kernel patching completed successfully for {{ vms_resp.json.value | length }} VM(s)"
- 
