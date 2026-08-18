@@ -30,7 +30,7 @@
     - name: 2. Discover Target Spoke VMs
       ansible.builtin.uri:
         url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
-        method:GET
+        method: GET
         headers:
           Authorization: "Bearer {{ token_resp.json.access_token }}"
       register: vms_resp
