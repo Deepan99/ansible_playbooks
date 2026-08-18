@@ -1,0 +1,60 @@
+---
+- name: Production Zero-Trust Kernel Patching & Safe Reboot
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    azure_sub_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET') }}"
+    azure_tenant_id: "{{ lookup('env', 'AZURE_TENANT') }}"
+    target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
+
+  tasks:
+    - name: 1. Obtain Azure Access Token
+      ansible.builtin.uri:
+        url: "https://login.microsoftonline.com/{{ azure_tenant_id }}/oauth2/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: "client_credentials"
+          client_id: "{{ azure_client_id }}"
+          client_secret: "{{ azure_secret }}"
+          resource: "https://management.azure.com/"
+      register: token_resp
+      no_log: true
+
+    - name: 2. Discover Target VMs
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+      register: vms_resp
+
+    - name: 3. Apply Kernel Updates & Reboot via ARM API Payload
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          commandId: "RunShellScript"
+          script:
+            - "dnf check-update --security || true"
+            - "dnf update -y kernel kernel-core kernel-modules kernel-devel dnf-utils"
+            - "if needs-restarting -r; then echo 'NO_REBOOT_NEEDED'; else reboot; fi"
+        status_code: [200, 202]
+      loop: "{{ vms_resp.json.value }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: patch_results
+
+    - name: 4. Audit Patch Results
+      ansible.builtin.debug:
+        msg: "Target VM: {{ item.item.name }} | Status: Kernel Update Triggered via ARM API"
+      loop: "{{ patch_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
