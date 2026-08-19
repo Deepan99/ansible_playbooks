@@ -1,6 +1,6 @@
 ---
 - name: Install and Configure Nginx Web Server
-  hosts: all
+  hosts: localhost
   become: true
   vars:
     # Service package name and state
