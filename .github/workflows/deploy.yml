@@ -1,30 +1,98 @@
-name: Production GitOps Deployment Pipeline
+name: Enterprise GitOps Automation Pipeline
 
+# =============================================================================
+# 1. TRIGGER CONDITIONS & PATH FILTERING (Configurable per project)
+# =============================================================================
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
     paths:
-      - 'playbooks/kernel_update_v2.yml'
+      - 'playbooks/**'
+      - 'roles/**'
+      - 'collections/**'
 
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'playbooks/**'
+      - 'roles/**'
+
+  # Allows manual execution from GitHub UI with custom parameters
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target Environment (dev/stage/prod)'
+        required: true
+        default: 'prod'
+      job_template_name:
+        description: 'AAP Job/Workflow Template Name'
+        required: true
+        default: 'Pipeline - Kernel Update GitOps'
+
+# =============================================================================
+# 2. PIPELINE JOBS
+# =============================================================================
 jobs:
-  deploy-kernel-update:
+  # ---------------------------------------------------------------------------
+  # STAGE 1: CONTINUOUS INTEGRATION (Linting, Syntax & Security Checks)
+  # ---------------------------------------------------------------------------
+  ci-validate-quality:
+    name: 🛡️ CI: Code Quality & Syntax Validation
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
+      - name: 1.1 Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Run Ansible Lint (CI Check)
-        uses: ansible/ansible-lint@main
+      - name: 1.2 Setup Python Environment
+        uses: actions/setup-python@v5
         with:
-          args: "playbooks/kernel_update_v2.yml"  
+          python-version: '3.11'
+          cache: 'pip'
 
-      - name: Trigger AAP Job Template via API
+      - name: 1.3 Install Ansible & Security Linters
         run: |
-          curl -X POST "https://${{ secrets.AAP_HOST }}/api/v2/job_templates/Job%20-%20Enterprise%20Kernel%20Patching/launch/" \
-            -u "${{ secrets.AAP_USER }}:${{ secrets.AAP_PASSWORD }}" \
-            -k \
-            -H "Content-Type: application/json"
-          curl -X POST "https://${{ secrets.AAP_HOST }}/api/v2/job_templates/Job%20-%20Enterprise%20Kernel%20Patching/launch/" \
-            -u "${{ secrets.AAP_USER }}:${{ secrets.AAP_PASSWORD }}" \
-            -k \
-            -H "Content-Type: application/json"
+          python -m pip install --upgrade pip
+          pip install ansible-core ansible-lint
+
+      - name: 1.4 Validate Ansible Playbook Syntax & Standards
+        run: |
+          ansible-lint playbooks/
+
+  # ---------------------------------------------------------------------------
+  # STAGE 2: CONTINUOUS DEPLOYMENT (AAP Execution via Official Red Hat Action)
+  # ---------------------------------------------------------------------------
+  cd-deploy-aap:
+    name: 🚀 CD: Trigger AAP Automation
+    needs: ci-validate-quality
+    if: (github.ref == 'refs/heads/main' && github.event_name == 'push') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 2.1 Launch AAP Template via Official Red Hat Action
+        uses: redhat-cop/ansible-controller-actions/launch_job@v1.1.0
+        with:
+          # Centralized secrets stored in GitHub Repository Secrets
+          controller_url: ${{ secrets.AAP_URL }}
+          controller_token: ${{ secrets.AAP_OAUTH_TOKEN }}
+          
+          # Dynamically picks specified template or defaults to main production pipeline
+          workflow_template_name: ${{ inputs.job_template_name || 'Pipeline - Kernel Update GitOps' }}
+          
+          # Enforces end-to-end tracing: Pipeline waits until AAP finishes
+          wait_for_completion: true
+          
+          # Disables SSL verification if using self-signed internal certs (set false for prod CA)
+          verify_ssl: false
+
+      - name: 2.2 Post-Deployment Status Report
+        run: |
+          echo "================================================="
+          echo "   GITOPS DEPLOYMENT PIPELINE SUCCESSFUL        "
+          echo "================================================="
+          echo "Trigger Event: ${{ github.event_name }}"
+          echo "Commit Hash:   ${{ github.sha }}"
+          echo "Execution:     Triggered & Verified via AAP Token"
+          echo "================================================="
