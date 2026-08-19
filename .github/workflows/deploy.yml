@@ -1,0 +1,30 @@
+name: Production GitOps Deployment Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'playbooks/kernel_update_v2.yml'
+
+jobs:
+  deploy-kernel-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Ansible Lint (CI Check)
+        uses: ansible/ansible-lint@main
+        with:
+          args: "playbooks/kernel_update_v2.yml"  
+
+      - name: Trigger AAP Job Template via API
+        run: |
+          curl -X POST "https://${{ secrets.AAP_HOST }}/api/v2/job_templates/Job%20-%20Enterprise%20Kernel%20Patching/launch/" \
+            -u "${{ secrets.AAP_USER }}:${{ secrets.AAP_PASSWORD }}" \
+            -k \
+            -H "Content-Type: application/json"
+          curl -X POST "https://${{ secrets.AAP_HOST }}/api/v2/job_templates/Job%20-%20Enterprise%20Kernel%20Patching/launch/" \
+            -u "${{ secrets.AAP_USER }}:${{ secrets.AAP_PASSWORD }}" \
+            -k \
+            -H "Content-Type: application/json"
