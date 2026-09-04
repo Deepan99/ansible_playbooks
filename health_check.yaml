@@ -144,7 +144,7 @@
 
     - name: Set Disk Status
       ansible.builtin.set_fact:
-        disk_status: "{{ 'CRITICAL' | if root_disk_percent.stdout|int >= critical_disk_percent else 'WARNING' | if root_disk_percent.stdout|int >= warning_disk_percent else 'OK' }}"
+        disk_status: "{{ 'CRITICAL' if root_disk_percent.stdout|int >= critical_disk_percent else 'WARNING' if root_disk_percent.stdout|int >= warning_disk_percent else 'OK' }}"
 
     - name: Display Comprehensive Host Health Summary
       ansible.builtin.debug:
@@ -155,7 +155,7 @@
           - ""
           - "📡 CONNECTIVITY"
           - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  SSH Status:          {{ '✅ CONNECTED' | if ping_result.ping == 'pong' else '❌ FAILED' }}"
+          - "  SSH Status:          {{ '✅ CONNECTED' if ping_result.ping == 'pong' else '❌ FAILED' }}"
           - "  Hostname:            {{ ansible_hostname }}"
           - "  IP Address:          {{ ansible_default_ipv4.address | default('N/A') }}"
           - "  FQDN:                {{ ansible_fqdn | default('N/A') }}"
@@ -232,7 +232,7 @@
           Azure Infrastructure Health Audit - {{ ansible_hostname }}
           Generated: {{ ansible_date_time.iso8601 }}
           
-          CONNECTIVITY: {{ 'OK' | if ping_result.ping == 'pong' else 'FAILED' }}
+          CONNECTIVITY: {{ 'OK' if ping_result.ping == 'pong' else 'FAILED' }}
           DISK STATUS: {{ disk_status }}
           UPTIME: {{ uptime_output.stdout }}
           MEMORY: {{ memory_output.stdout }}
