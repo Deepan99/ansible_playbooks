@@ -3,100 +3,113 @@
   hosts: all
   gather_facts: true
   become: false
- 
+
   vars:
     warning_disk_percent: 80
     critical_disk_percent: 90
     warning_memory_percent: 80
     critical_memory_percent: 90
- 
+
   tasks:
     - name: 1. Verify SSH Connectivity
       ansible.builtin.ping:
       register: ping_result
- 
+
     - name: 2. Check Host Uptime
-      ansible.builtin.command: uptime -p
+      ansible.builtin.shell: |
+        uptime -p
       register: uptime_output
       changed_when: false
- 
+
     - name: 3. Check System Load Average
-      ansible.builtin.shell: cat /proc/loadavg | awk '{print "1min: " $1 " | 5min: " $2 " | 15min: " $3}'
+      ansible.builtin.shell: |
+        cat /proc/loadavg | awk '{print "1min: " $1 " | 5min: " $2 " | 15min: " $3}'
       register: loadavg_output
       changed_when: false
- 
+
     - name: 4. Check CPU Core Count
-      ansible.builtin.shell: nproc
+      ansible.builtin.shell: |
+        nproc
       register: cpu_cores
       changed_when: false
- 
+
     - name: 5. Check Memory Usage Details
       ansible.builtin.shell: |
         free -h | awk 'NR==2{printf "Used: %s / Total: %s (%.1f%%)", $3,$2,$3*100/$2 }'
       register: memory_output
       changed_when: false
- 
+
     - name: 6. Check Swap Usage
       ansible.builtin.shell: |
         free -h | awk 'NR==3{if($2!="0B") printf "Swap Used: %s / Total: %s (%.1f%%)", $3,$2,$3*100/$2; else print "Swap: Disabled"}'
       register: swap_output
       changed_when: false
- 
+
     - name: 7. Check Disk Space on All Partitions
-      ansible.builtin.shell: df -h | awk 'NR>1 {printf "%-20s %5s / %5s (%3s used) - %s free\n", $6, $3, $2, $5, $4}'
+      ansible.builtin.shell: |
+        df -h | awk 'NR>1 {printf "%-20s %5s / %5s (%3s used) - %s free\n", $6, $3, $2, $5, $4}'
       register: disk_output
       changed_when: false
- 
+
     - name: 8. Check Root Partition Usage Percentage
-      ansible.builtin.shell: df / | awk 'NR==2 {print $5}' | sed 's/%//'
+      ansible.builtin.shell: |
+        df / | awk 'NR==2 {print $5}' | sed 's/%//'
       register: root_disk_percent
       changed_when: false
- 
+
     - name: 9. Check Network Interfaces
-      ansible.builtin.shell: ip -4 addr show | grep -E "inet|^[0-9]" | awk '{print $2 " " $NF}' | head -20
+      ansible.builtin.shell: |
+        ip -4 addr show | grep -E "inet|^[0-9]" | awk '{print $2 " " $NF}' | head -20
       register: network_interfaces
       changed_when: false
       ignore_errors: true
- 
+
     - name: 10. Check Active Network Connections
-      ansible.builtin.shell: ss -tun | awk 'NR>1 {print $1 " " $5}' | sort | uniq -c | sort -rn | head -10
+      ansible.builtin.shell: |
+        ss -tun | awk 'NR>1 {print $1 " " $5}' | sort | uniq -c | sort -rn | head -10
       register: network_connections
       changed_when: false
       ignore_errors: true
- 
+
     - name: 11. Check Running Processes Count
-      ansible.builtin.shell: ps aux | wc -l
+      ansible.builtin.shell: |
+        ps aux | wc -l
       register: process_count
       changed_when: false
- 
+
     - name: 12. Check Top 5 CPU Consuming Processes
-      ansible.builtin.shell: ps aux --sort=-%cpu | head -6 | awk '{printf "%-10s %6s %6s %s\n", $1, $3"%", $4"%", $11}'
+      ansible.builtin.shell: |
+        ps aux --sort=-%cpu | head -6 | awk '{printf "%-10s %6s %6s %s\n", $1, $3"%", $4"%", $11}'
       register: top_cpu_processes
       changed_when: false
- 
+
     - name: 13. Check Top 5 Memory Consuming Processes
-      ansible.builtin.shell: ps aux --sort=-%mem | head -6 | awk '{printf "%-10s %6s %6s %s\n", $1, $3"%", $4"%", $11}'
+      ansible.builtin.shell: |
+        ps aux --sort=-%mem | head -6 | awk '{printf "%-10s %6s %6s %s\n", $1, $3"%", $4"%", $11}'
       register: top_mem_processes
       changed_when: false
- 
+
     - name: 14. Check Systemd Service Failures
-      ansible.builtin.shell: systemctl list-units --state=failed --no-pager --plain | head -10
+      ansible.builtin.shell: |
+        systemctl list-units --state=failed --no-pager --plain | head -10
       register: failed_services
       changed_when: false
       ignore_errors: true
- 
+
     - name: 15. Check Time Synchronization (NTP)
-      ansible.builtin.shell: timedatectl status | grep -E "System clock synchronized|NTP service"
+      ansible.builtin.shell: |
+        timedatectl status | grep -E "System clock synchronized|NTP service"
       register: ntp_status
       changed_when: false
       ignore_errors: true
- 
+
     - name: 16. Check Recent System Errors (last 50 lines)
-      ansible.builtin.shell: journalctl -p err -n 50 --no-pager | tail -10
+      ansible.builtin.shell: |
+        journalctl -p err -n 50 --no-pager | tail -10
       register: recent_errors
       changed_when: false
       ignore_errors: true
- 
+
     - name: 17. Check Available Security Updates
       ansible.builtin.shell: |
         if command -v apt-get &> /dev/null; then
@@ -109,27 +122,30 @@
       register: security_updates
       changed_when: false
       ignore_errors: true
- 
+
     - name: 18. Check Kernel Version
-      ansible.builtin.command: uname -r
+      ansible.builtin.shell: |
+        uname -r
       register: kernel_version
       changed_when: false
- 
+
     - name: 19. Check Logged-in Users
-      ansible.builtin.shell: who
+      ansible.builtin.shell: |
+        who
       register: logged_users
       changed_when: false
- 
+
     - name: 20. Check Last 10 System Boot Times
-      ansible.builtin.shell: last reboot | head -10
+      ansible.builtin.shell: |
+        last reboot | head -10
       register: reboot_history
       changed_when: false
       ignore_errors: true
- 
+
     - name: Set Disk Status
       ansible.builtin.set_fact:
         disk_status: "{{ 'CRITICAL' | if root_disk_percent.stdout|int >= critical_disk_percent else 'WARNING' | if root_disk_percent.stdout|int >= warning_disk_percent else 'OK' }}"
- 
+
     - name: Display Comprehensive Host Health Summary
       ansible.builtin.debug:
         msg:
@@ -209,13 +225,13 @@
           - "========================================================================================================"
           - "Report Generated: {{ ansible_date_time.iso8601 }}"
           - "========================================================================================================"
- 
+
     - name: Create Health Check Summary File
       ansible.builtin.copy:
         content: |
           Azure Infrastructure Health Audit - {{ ansible_hostname }}
           Generated: {{ ansible_date_time.iso8601 }}
- 
+          
           CONNECTIVITY: {{ 'OK' | if ping_result.ping == 'pong' else 'FAILED' }}
           DISK STATUS: {{ disk_status }}
           UPTIME: {{ uptime_output.stdout }}
