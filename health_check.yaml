@@ -146,99 +146,129 @@
       ansible.builtin.set_fact:
         disk_status: "{{ 'CRITICAL' if root_disk_percent.stdout|int >= critical_disk_percent else 'WARNING' if root_disk_percent.stdout|int >= warning_disk_percent else 'OK' }}"
 
-    - name: Display Comprehensive Host Health Summary
+    - name: Display Summary for AAP
       ansible.builtin.debug:
         msg:
           - "========================================================================================================"
-          - "🔍 AZURE INFRASTRUCTURE HEALTH AUDIT REPORT"
+          - "🔍 AZURE INFRASTRUCTURE HEALTH AUDIT SUMMARY"
           - "========================================================================================================"
-          - ""
-          - "📡 CONNECTIVITY"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  SSH Status:          {{ '✅ CONNECTED' if ping_result.ping == 'pong' else '❌ FAILED' }}"
-          - "  Hostname:            {{ ansible_hostname }}"
-          - "  IP Address:          {{ ansible_default_ipv4.address | default('N/A') }}"
-          - "  FQDN:                {{ ansible_fqdn | default('N/A') }}"
-          - ""
-          - "🖥️  SYSTEM INFORMATION"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  OS:                  {{ ansible_distribution }} {{ ansible_distribution_version }}"
-          - "  Kernel:              {{ kernel_version.stdout }}"
-          - "  Architecture:        {{ ansible_architecture }}"
-          - "  Virtualization:      {{ ansible_virtualization_type | default('N/A') }}"
-          - ""
-          - "⏱️  SYSTEM UPTIME & LOAD"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Uptime:              {{ uptime_output.stdout }}"
-          - "  Load Average:        {{ loadavg_output.stdout }}"
-          - "  CPU Cores:           {{ cpu_cores.stdout }}"
-          - ""
-          - "💾 MEMORY STATUS"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Memory Usage:        {{ memory_output.stdout }}"
-          - "  {{ swap_output.stdout }}"
-          - "  Total RAM:           {{ (ansible_memtotal_mb / 1024) | round(2) }} GB"
-          - ""
-          - "💽 DISK SPACE ({{ disk_status }})"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "{{ disk_output.stdout.split('\n') }}"
-          - ""
-          - "🌐 NETWORK STATUS"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Network Interfaces:"
-          - "{{ network_interfaces.stdout.split('\n') | default(['N/A']) }}"
-          - "  Top Connections:"
-          - "{{ network_connections.stdout.split('\n') | default(['N/A']) }}"
-          - ""
-          - "⚙️  PROCESS & SERVICES"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Total Processes:     {{ process_count.stdout }}"
-          - "  Top CPU Processes:"
-          - "{{ top_cpu_processes.stdout.split('\n') }}"
-          - "  Top Memory Processes:"
-          - "{{ top_mem_processes.stdout.split('\n') }}"
-          - ""
-          - "🔧 SERVICES & SYSTEM"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Failed Services:"
-          - "{{ failed_services.stdout.split('\n') | default(['No failed services']) }}"
-          - "  NTP Status:"
-          - "{{ ntp_status.stdout.split('\n') | default(['N/A']) }}"
-          - ""
-          - "👥 USER ACTIVITY"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Logged-in Users:"
-          - "{{ logged_users.stdout.split('\n') | default(['No users logged in']) }}"
-          - ""
-          - "📊 SECURITY & UPDATES"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "  Security Updates:    {{ security_updates.stdout }} pending"
-          - ""
-          - "📝 RECENT REBOOTS"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "{{ reboot_history.stdout.split('\n') | default(['No reboot history available']) }}"
-          - ""
-          - "⚠️  RECENT SYSTEM ERRORS (last 10)"
-          - "────────────────────────────────────────────────────────────────────────────────────────────────────────"
-          - "{{ recent_errors.stdout.split('\n') | default(['No recent errors']) }}"
-          - ""
+          - "Host: {{ ansible_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})"
+          - "Connectivity: {{ '✅ OK' if ping_result.ping == 'pong' else '❌ FAILED' }}"
+          - "Disk Status: {{ disk_status }}"
+          - "Uptime: {{ uptime_output.stdout }}"
+          - "Memory: {{ memory_output.stdout }}"
+          - "Load: {{ loadavg_output.stdout }}"
+          - "Failed Services: {{ failed_services.stdout | default('None') }}"
+          - "Security Updates: {{ security_updates.stdout }} pending"
           - "========================================================================================================"
-          - "Report Generated: {{ ansible_date_time.iso8601 }}"
+          - "Full report: /tmp/health_audit_{{ ansible_hostname }}_{{ ansible_date_time.epoch }}.txt"
+          - "JSON summary: /tmp/health_audit_{{ ansible_hostname }}_{{ ansible_date_time.epoch }}.json"
           - "========================================================================================================"
 
-    - name: Create Health Check Summary File
+    - name: Create Comprehensive Health Check Report File
       ansible.builtin.copy:
         content: |
-          Azure Infrastructure Health Audit - {{ ansible_hostname }}
+          ========================================================================================================
+          🔍 AZURE INFRASTRUCTURE HEALTH AUDIT REPORT
+          ========================================================================================================
+          Host: {{ ansible_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})
           Generated: {{ ansible_date_time.iso8601 }}
-          
-          CONNECTIVITY: {{ 'OK' if ping_result.ping == 'pong' else 'FAILED' }}
-          DISK STATUS: {{ disk_status }}
-          UPTIME: {{ uptime_output.stdout }}
-          MEMORY: {{ memory_output.stdout }}
-          LOAD: {{ loadavg_output.stdout }}
-          FAILED SERVICES: {{ failed_services.stdout | default('None') }}
-          SECURITY UPDATES: {{ security_updates.stdout }}
+          ========================================================================================================
+
+          📡 CONNECTIVITY
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          SSH Status: {{ '✅ CONNECTED' if ping_result.ping == 'pong' else '❌ FAILED' }}
+          Hostname: {{ ansible_hostname }}
+          IP Address: {{ ansible_default_ipv4.address | default('N/A') }}
+          FQDN: {{ ansible_fqdn | default('N/A') }}
+
+          🖥️  SYSTEM INFORMATION
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ kernel_version.stdout }}
+          Architecture: {{ ansible_architecture }}
+          Virtualization: {{ ansible_virtualization_type | default('N/A') }}
+
+          ⏱️  SYSTEM UPTIME & LOAD
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Uptime: {{ uptime_output.stdout }}
+          Load Average: {{ loadavg_output.stdout }}
+          CPU Cores: {{ cpu_cores.stdout }}
+
+          💾 MEMORY STATUS
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Memory Usage: {{ memory_output.stdout }}
+          {{ swap_output.stdout }}
+          Total RAM: {{ (ansible_memtotal_mb / 1024) | round(2) }} GB
+
+          💽 DISK SPACE ({{ disk_status }})
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          {{ disk_output.stdout }}
+
+          🌐 NETWORK STATUS
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Network Interfaces:
+          {{ network_interfaces.stdout | default('N/A') }}
+          Top Connections:
+          {{ network_connections.stdout | default('N/A') }}
+
+          ⚙️  PROCESS & SERVICES
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Total Processes: {{ process_count.stdout }}
+          Top CPU Processes:
+          {{ top_cpu_processes.stdout }}
+          Top Memory Processes:
+          {{ top_mem_processes.stdout }}
+
+          🔧 SERVICES & SYSTEM
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Failed Services:
+          {{ failed_services.stdout | default('No failed services') }}
+          NTP Status:
+          {{ ntp_status.stdout | default('N/A') }}
+
+          👥 USER ACTIVITY
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Logged-in Users:
+          {{ logged_users.stdout | default('No users logged in') }}
+
+          📊 SECURITY & UPDATES
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          Security Updates: {{ security_updates.stdout }} pending
+
+          📝 RECENT REBOOTS
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          {{ reboot_history.stdout | default('No reboot history available') }}
+
+          ⚠️  RECENT SYSTEM ERRORS (last 10)
+          ────────────────────────────────────────────────────────────────────────────────────────────────────────
+          {{ recent_errors.stdout | default('No recent errors') }}
+
+          ========================================================================================================
+          END OF REPORT
+          ========================================================================================================
         dest: "/tmp/health_audit_{{ ansible_hostname }}_{{ ansible_date_time.epoch }}.txt"
+        mode: '0644'
+      become: true
+
+    - name: Create JSON Summary for AAP
+      ansible.builtin.copy:
+        content: |
+          {
+            "hostname": "{{ ansible_hostname }}",
+            "ip_address": "{{ ansible_default_ipv4.address | default('N/A') }}",
+            "connectivity": "{{ 'OK' if ping_result.ping == 'pong' else 'FAILED' }}",
+            "disk_status": "{{ disk_status }}",
+            "uptime": "{{ uptime_output.stdout }}",
+            "memory_usage": "{{ memory_output.stdout }}",
+            "load_average": "{{ loadavg_output.stdout }}",
+            "cpu_cores": "{{ cpu_cores.stdout }}",
+            "total_processes": "{{ process_count.stdout }}",
+            "failed_services": "{{ failed_services.stdout | default('None') }}",
+            "security_updates": "{{ security_updates.stdout }}",
+            "report_file": "/tmp/health_audit_{{ ansible_hostname }}_{{ ansible_date_time.epoch }}.txt",
+            "generated_at": "{{ ansible_date_time.iso8601 }}"
+          }
+        dest: "/tmp/health_audit_{{ ansible_hostname }}_{{ ansible_date_time.epoch }}.json"
         mode: '0644'
       become: true
