@@ -1,0 +1,29 @@
+---
+- name: Azure Infrastructure Health & Connectivity Audit
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: 1. Verify SSH Connectivity
+      ansible.builtin.ping:
+
+    - name: 2. Check Host Uptime
+      ansible.builtin.command: uptime -p
+      register: uptime_output
+      changed_when: false
+
+    - name: 3. Check Disk Space on Root Partition (/)
+      ansible.builtin.shell: df -h / | awk 'NR==2 {print $4 " free out of " $2 " (" $5 " used)"}'
+      register: disk_output
+      changed_when: false
+
+    - name: 4. Display Host Health Summary
+      ansible.builtin.debug:
+        msg:
+          - "================================================="
+          - "🖥️  Host:         {{ ansible_hostname }} ({{ ansible_default_ipv4.address | default('N/A') }})"
+          - "🐧 OS:           {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "⏱️  Uptime:       {{ uptime_output.stdout }}"
+          - "💾 RAM:          {{ (ansible_memtotal_mb / 1024) | round(2) }} GB Total"
+          - "💽 Disk Space:   {{ disk_output.stdout }}"
+          - "================================================="
