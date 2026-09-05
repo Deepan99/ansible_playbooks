@@ -1,7 +1,7 @@
 ---
 - name: Azure Infrastructure Health & Connectivity Audit
   hosts: all
-  gather_facts: true
+  gather_facts: false
   become: false
 
   vars:
@@ -9,6 +9,18 @@
     critical_disk_percent: 90
     warning_memory_percent: 80
     critical_memory_percent: 90
+
+  pre_tasks:
+    - name: Dynamically configure SSH ProxyJump for Spoke VMs
+      ansible.builtin.set_fact:
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand=\"ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -q azureuser@20.69.92.172\""
+      when: "'web' in inventory_hostname or 'app' in inventory_hostname"
+    - name: Configure Direct Connection for Hub Jumpbox
+      ansible.builtin.set_fact:
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+      when: "'hub' in inventory_hostname"
+    - name: Gather Facts from All Hosts
+      ansible.builtin.setup:
 
   tasks:
     - name: 1. Verify SSH Connectivity
