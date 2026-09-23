@@ -1,0 +1,11 @@
+---
+- name: Hello World / Ping Test
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ping the server to check connectivity
+      ansible.builtin.ping:
+
+    - name: Print a Hello World message
+      ansible.builtin.debug:
+        msg: "Hello from {{ inventory_hostname }}! The execution node setup is working perfectly."
