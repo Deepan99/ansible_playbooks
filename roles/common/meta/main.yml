@@ -1,5 +1,7 @@
 galaxy_info:
-  author: Deepan
+  author: deepan
+  namespace: deepan
+  role_name: common
   description: Common role for basic setup
   company: none
   license: MIT
