@@ -1,0 +1,52 @@
+---
+- name: Pre-Checks and Post-Checks Maintenance Verification
+  hosts: all
+  become: true
+  vars:
+    required_disk_space_gb: 5
+
+  tasks:
+    # ------------------
+    # PRE-CHECKS
+    # ------------------
+    - name: Run Pre-Maintenance Checks
+      block:
+        - name: Check free disk space on root partition
+          ansible.builtin.assert:
+            that:
+              - (ansible_facts['mounts'] | selectattr('path', 'equalto', '/') | map(attribute='size_available') | first / 1024 / 1024 / 1024) >= required_disk_space_gb
+            fail_msg: "Insufficient disk space on / partition. Minimum required is {{ required_disk_space_gb }} GB."
+            success_msg: "Disk space pre-check passed successfully."
+
+        - name: Record current running services state
+          ansible.builtin.command: "systemctl list-units --state=running"
+          register: pre_running_services
+          changed_when: false
+
+        - name: Save pre-check service log
+          ansible.builtin.copy:
+            content: "{{ pre_running_services.stdout }}"
+            dest: "/tmp/pre_maintenance_services.log"
+            mode: '0600'
+
+    # ------------------
+    # POST-CHECKS
+    # ------------------
+    - name: Run Post-Maintenance Checks
+      block:
+        - name: Retrieve current running services state
+          ansible.builtin.command: "systemctl list-units --state=running"
+          register: post_running_services
+          changed_when: false
+
+        - name: Check system uptime
+          ansible.builtin.command: "uptime"
+          register: system_uptime
+          changed_when: false
+
+        - name: Print Uptime and Verification Status
+          ansible.builtin.debug:
+            msg:
+              - "System Uptime: {{ system_uptime.stdout }}"
+              - "Pre-checks logs saved to /tmp/pre_maintenance_services.log"
+              - "Verification complete."

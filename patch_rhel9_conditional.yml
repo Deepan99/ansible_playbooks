@@ -1,0 +1,25 @@
+---
+- name: Conditional RHEL 9 Patching based on Repo Status
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if new packages are available in configured repositories
+      ansible.builtin.command: "dnf check-update"
+      register: check_update_result
+      # dnf check-update returns 100 if updates are available, 0 if none, and 1 on error.
+      # We prevent Ansible from failing on return code 100.
+      failed_when: "check_update_result.rc not in [0, 100]"
+      changed_when: false
+
+    - name: Run system patching because updates were detected (rc=100)
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        update_cache: true
+      when: check_update_result.rc == 100
+      register: dnf_upgrade_result
+
+    - name: Log status when no updates are available (rc=0)
+      ansible.builtin.debug:
+        msg: "No new packages found in repositories. System is up to date."
+      when: check_update_result.rc == 0

@@ -1,0 +1,23 @@
+# VMware Host Credentials
+vcenter_hostname: "vcenter.example.local"
+vcenter_username: "administrator@vsphere.local"
+vcenter_password: "YourSecurePasswordHere"
+vcenter_validate_certs: false
+
+# VMware vSphere Infrastructure
+datacenter_name: "Datacenter1"
+cluster_name: "Cluster1"
+datastore_name: "datastore1"
+network_name: "VM Network"
+
+# Target Virtual Machine Specifications
+vm_name: "rhel9-dev-vm"
+guest_id: "rhel9_64Guest"
+
+# Minimal Specifications (1 vCPU, 1 GB RAM, 20 GB Disk)
+cpu_count: 1
+ram_mb: 1024
+disk_size_gb: 20
+
+# Installation Media
+iso_path: "[datastore1] ISOs/rhel-baseos-9.0-x86_64-boot.iso"

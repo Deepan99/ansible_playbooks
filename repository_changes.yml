@@ -1,0 +1,20 @@
+---
+- name: Manage Package Repositories
+  hosts: all
+  become: true
+  tasks:
+    - name: Enable the EPEL (Extra Packages for Enterprise Linux) release repository
+      ansible.builtin.dnf:
+        name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm"
+        state: present
+        disable_gpg_check: false
+
+    - name: Add a custom local enterprise mirror repository
+      ansible.builtin.yum_repository:
+        name: "internal_updates"
+        description: "Internal AppStream Mirror for RHEL 9"
+        baseurl: "http://mirror.internal.local/rhel9/appstream/"
+        gpgcheck: true
+        gpgkey: "http://mirror.internal.local/rhel9/RPM-GPG-KEY-redhat-release"
+        enabled: true
+        state: present

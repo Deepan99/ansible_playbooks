@@ -1,0 +1,28 @@
+---
+- name: Package Maintenance Rollback and Recovery
+  hosts: all
+  become: true
+  tasks:
+    - name: Get DNF package manager transaction history
+      ansible.builtin.command: "dnf history list"
+      register: dnf_history
+      changed_when: false
+
+    - name: Display last 5 DNF transactions for audit
+      ansible.builtin.debug:
+        msg: "{{ dnf_history.stdout_lines[:7] }}"
+
+    # WARNING: This rolls back the last DNF transaction automatically.
+    # Typically, you should run this manually by target transaction ID (dnf history undo <ID>).
+    - name: Rollback the most recent DNF package transaction
+      ansible.builtin.command: "dnf history undo last -y"
+      register: rollback_result
+      failed_when: 
+        - rollback_result.rc != 0
+        # If there are no transactions to undo, dnf will return exit code 1 with "Nothing to do".
+        # We can handle this gracefully.
+        - "'Nothing to do' not in rollback_result.stderr"
+      
+    - name: Display Rollback Result Summary
+      ansible.builtin.debug:
+        var: rollback_result.stdout_lines

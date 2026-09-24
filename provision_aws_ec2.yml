@@ -1,0 +1,47 @@
+---
+- name: Provision RHEL 9 EC2 Instance in AWS
+  hosts: localhost
+  gather_facts: false
+  vars:
+    # AWS configuration details (using placeholder values)
+    aws_region: "us-east-1"
+    instance_name: "rhel9-aws-dev-vm"
+    
+    # Minimal Instance Type (matches free tier in most regions)
+    instance_type: "t2.micro"
+    
+    # Placeholder RHEL 9 AMI ID (Change to matching AMI ID in your AWS region)
+    ami_id: "ami-0c7217cdde317cfec"
+    
+    # AWS Network details
+    subnet_id: "subnet-0123456789abcdef0"
+    security_group_id: "sg-0123456789abcdef0"
+    key_pair_name: "my-aws-ssh-key"
+
+  tasks:
+    - name: Create the EC2 instance in AWS
+      amazon.aws.ec2_instance:
+        name: "{{ instance_name }}"
+        region: "{{ aws_region }}"
+        image_id: "{{ ami_id }}"
+        instance_type: "{{ instance_type }}"
+        vpc_subnet_id: "{{ subnet_id }}"
+        security_groups:
+          - "{{ security_group_id }}"
+        key_name: "{{ key_pair_name }}"
+        state: running
+        wait: true
+        # Tag the resource for inventory organization
+        tags:
+          Environment: Dev
+          Project: Provisioning
+      register: ec2_info
+
+    - name: Display EC2 instance details
+      ansible.builtin.debug:
+        msg:
+          - "Instance Name: {{ instance_name }}"
+          - "Instance ID: {{ ec2_info.instances[0].instance_id }}"
+          - "Public IP: {{ ec2_info.instances[0].public_ip_address | default('None') }}"
+          - "Private IP: {{ ec2_info.instances[0].private_ip_address }}"
+          - "State: {{ ec2_info.instances[0].state.name }}"

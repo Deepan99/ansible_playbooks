@@ -1,0 +1,11 @@
+---
+- name: Apply System Security Patches
+  hosts: all
+  become: true
+  tasks:
+    - name: Apply security updates only
+      ansible.builtin.dnf:
+        name: "*"
+        state: latest
+        security: true
+        update_cache: true

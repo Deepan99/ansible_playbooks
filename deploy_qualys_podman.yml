@@ -1,0 +1,47 @@
+---
+- name: Deploy Qualys Container Sensor in Podman (CLI Command Version)
+  hosts: all
+  become: true
+  vars:
+    qualys_image: "qualys/container-sensor:latest"
+    sensor_container_name: "qualys-container-sensor"
+    
+    # Required Qualys configuration tokens (usually stored in Vault)
+    qualys_activation_id: "PLACEHOLDER_ACTIVATION_ID"
+    qualys_customer_id: "PLACEHOLDER_CUSTOMER_ID"
+    qualys_pod_url: "https://pod.qualys.com"
+
+  tasks:
+    - name: Pull the Qualys Container Sensor image
+      ansible.builtin.command: "podman pull {{ qualys_image }}"
+      register: pull_result
+      changed_when: "'Copying blob' in pull_result.stdout"
+
+    - name: Check if existing Qualys container sensor is running
+      ansible.builtin.command: "podman ps -a --filter name={{ sensor_container_name }} --format {% raw %}'{{.Names}}'{% endraw %}"
+      register: container_check
+      changed_when: false
+      failed_when: false
+
+    - name: Remove existing Qualys sensor container if it exists
+      ansible.builtin.command: "podman rm -f {{ sensor_container_name }}"
+      when: container_check.stdout == sensor_container_name
+      register: remove_result
+      changed_when: remove_result.rc == 0
+
+    - name: Deploy Qualys Container Sensor container via Podman CLI
+      # Using raw podman run command because containers.podman collection is not installed
+      ansible.builtin.command: >
+        podman run -d
+        --name {{ sensor_container_name }}
+        --restart always
+        --privileged
+        --net=host
+        -v /var/run/docker.sock:/var/run/docker.sock:ro
+        -v /sys/fs/cgroup:/sys/fs/cgroup:ro
+        -e ACTIVATION_ID={{ qualys_activation_id }}
+        -e CUSTOMER_ID={{ qualys_customer_id }}
+        -e POD_URL={{ qualys_pod_url }}
+        {{ qualys_image }}
+      register: run_result
+      changed_when: run_result.rc == 0

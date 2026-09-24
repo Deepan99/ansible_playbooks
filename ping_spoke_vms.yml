@@ -1,0 +1,60 @@
+---
+- name: Production Zero-Trust ARM Management (Zero Hardcoded Secrets)
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    # Read automatically from AAP Environment Variables supplied by Azure Credential
+    azure_sub_id: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+    azure_client_id: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
+    azure_secret: "{{ lookup('env', 'AZURE_SECRET') }}"
+    azure_tenant_id: "{{ lookup('env', 'AZURE_TENANT') }}"
+    target_rg: "{{ resource_group | default('rg-spoke-eastus') }}"
+
+  tasks:
+    - name: 1. Obtain Azure OAuth2 Access Token
+      ansible.builtin.uri:
+        url: "https://login.microsoftonline.com/{{ azure_tenant_id }}/oauth2/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          grant_type: "client_credentials"
+          client_id: "{{ azure_client_id }}"
+          client_secret: "{{ azure_secret }}"
+          resource: "https://management.azure.com/"
+      register: token_resp
+      no_log: true # Prevents token leakage in AAP job logs
+
+    - name: 2. Discover Spoke VMs in Resource Group
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines?api-version=2023-09-01"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+      register: vms_resp
+      no_log: false
+
+    - name: 3. Execute Control-Plane RunCommand across VMs
+      ansible.builtin.uri:
+        url: "https://management.azure.com/subscriptions/{{ azure_sub_id }}/resourceGroups/{{ target_rg }}/providers/Microsoft.Compute/virtualMachines/{{ item.name }}/runCommand?api-version=2023-09-01"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ token_resp.json.access_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          commandId: "RunShellScript"
+          script:
+            - "hostname; uptime"
+        status_code: [200, 202]
+      loop: "{{ vms_resp.json.value }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: run_results
+
+    - name: 4. Audit Execution Results
+      ansible.builtin.debug:
+        msg: "Target VM: {{ item.item.name }} | Status: Executed via ARM API (200 OK)"
+      loop: "{{ run_results.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"

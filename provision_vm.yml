@@ -1,0 +1,48 @@
+---
+- name: Provision RHEL 9 Virtual Machine on VMware
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ensure VMware guest VM exists with minimal specifications
+      community.vmware.vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: "{{ vcenter_validate_certs }}"
+        datacenter: "{{ datacenter_name }}"
+        cluster: "{{ cluster_name }}"
+        name: "{{ vm_name }}"
+        state: poweredon
+        guest_id: "{{ guest_id }}"
+        disk:
+          - size_gb: "{{ disk_size_gb }}"
+            type: thin
+            datastore: "{{ datastore_name }}"
+        hardware:
+          memory_mb: "{{ ram_mb }}"
+          num_cpus: "{{ cpu_count }}"
+          scsi: lsilogicsas
+          boot_order:
+            - cdrom
+            - disk
+        networks:
+          - name: "{{ network_name }}"
+            device_type: vmxnet3
+            start_connected: true
+        cdrom:
+          - type: iso
+            iso_path: "{{ iso_path }}"
+            state: present
+            controller_number: 0
+            unit_number: 0
+      register: vm_provision_result
+
+    - name: Display VM Provisioning Summary
+      ansible.builtin.debug:
+        msg:
+          - "VM Name: {{ vm_name }}"
+          - "Status: Created & Powered On"
+          - "vCPUs: {{ cpu_count }}"
+          - "RAM: {{ ram_mb }} MB"
+          - "Disk Size: {{ disk_size_gb }} GB"
+          - "CD-ROM Mounted: {{ iso_path }}"

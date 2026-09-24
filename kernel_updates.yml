@@ -1,0 +1,20 @@
+---
+- name: Update Operating System Kernel
+  hosts: all
+  become: true
+  tasks:
+    - name: Update RHEL Kernel packages
+      ansible.builtin.dnf:
+        name:
+          - kernel
+          - kernel-core
+          - kernel-modules
+          - kernel-devel
+        state: latest
+        update_cache: true
+      register: kernel_update_result
+
+    - name: Notify system administrators that a reboot is required
+      ansible.builtin.debug:
+        msg: "Kernel has been updated. Please run reboot_nodes.yml to complete the installation."
+      when: kernel_update_result.changed
