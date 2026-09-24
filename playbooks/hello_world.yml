@@ -1,7 +1,7 @@
 ---
 - name: Hello World / Ping Test
   hosts: all
-  become: yes
+  become: true
   tasks:
     - name: Ping the server to check connectivity
       ansible.builtin.ping:

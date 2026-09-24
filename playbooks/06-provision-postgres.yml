@@ -40,7 +40,7 @@
         disable_gpg_check: true
 
     - name: Disable the built-in CentOS postgresql DNF module (prevents conflicts)
-      ansible.builtin.shell: dnf module disable postgresql -y
+      ansible.builtin.command: dnf module disable postgresql -y
       register: module_disable
       changed_when: "'Disabling' in module_disable.stdout"
       failed_when: false   # module may not exist on some versions
@@ -68,7 +68,7 @@
       register: pg_initialized
 
     - name: Initialize PostgreSQL 15 database cluster
-      ansible.builtin.shell: "{{ postgres_bin_dir }}/postgresql-15-setup initdb"
+      ansible.builtin.command: "{{ postgres_bin_dir }}/postgresql-15-setup initdb"
       when: not pg_initialized.stat.exists
       changed_when: true
 
@@ -122,6 +122,7 @@
         password: "{{ awx_db_password }}"
         role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
         state: present
+      become: true
       become_user: postgres
 
     - name: Create 'awx' PostgreSQL database (UTF-8, template0)
@@ -133,6 +134,7 @@
         lc_ctype: "en_US.UTF-8"
         template: template0
         state: present
+      become: true
       become_user: postgres
 
     - name: Grant all privileges on 'awx' database to 'awx' user
@@ -142,6 +144,7 @@
         privs: ALL
         type: database
         state: present
+      become: true
       become_user: postgres
 
     # ─── Step 9: Open firewalld port 5432 ─────────────────────

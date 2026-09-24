@@ -22,4 +22,4 @@
       always:
         - name: Mandatory Cleanup: Update package manager cache
           ansible.builtin.apt:
-            update_cache: yes
+            update_cache: true
