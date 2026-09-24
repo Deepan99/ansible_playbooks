@@ -1,0 +1,38 @@
+---
+# Playbook: 02-nginx-webserver.yml
+# Demonstrates: Nginx installation, Jinja2 templating, handlers, state idempotency
+- name: Deploy and Configure High-Availability Nginx Web Servers
+  hosts: webservers
+  become: true
+  vars:
+    server_name: "example.com"
+    doc_root: "/var/www/my_app"
+
+  tasks:
+    - name: Install Nginx Web Server
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+
+    - name: Create Web Root Directory
+      ansible.builtin.file:
+        path: "{{ doc_root }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Render Custom Jinja2 Web Page Template
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: "{{ doc_root }}/index.html"
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      notify: Restart Nginx Service
+
+  handlers:
+    - name: Restart Nginx Service
+      ansible.builtin.service:
+        name: nginx
+        state: restarted

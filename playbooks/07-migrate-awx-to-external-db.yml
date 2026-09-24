@@ -1,0 +1,316 @@
+---
+# ═══════════════════════════════════════════════════════════════
+# Playbook 07 — Migrate AWX PostgreSQL to External Node
+#
+# Overview (3 plays):
+#   Play 1 (k8s_master .129): Dump in-cluster AWX database
+#   Play 2 (infra .131):      Restore dump into external PG
+#   Play 3 (k8s_master .129): Create k8s Secret + update AWX CRD
+#
+# Prerequisites:
+#   - Playbook 06 has already run successfully on .131
+#   - PostgreSQL 15 is running and 'awx' user/db exist on .131
+#   - AWX is currently live and the in-cluster postgres pod exists
+#
+# Run with:
+#   ansible-playbook playbooks/07-migrate-awx-to-external-db.yml \
+#     -i inventories/production/hosts.ini \
+#     -e @vars/vault.yml --ask-vault-pass
+# ═══════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════
+# PLAY 1 — Dump existing AWX data from the in-cluster postgres pod
+# Target: k8s_master (192.168.224.129)
+# ═══════════════════════════════════════════════════════════════
+- name: "PLAY 1 — Dump AWX database from in-cluster PostgreSQL pod"
+  hosts: k8s_master
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    - name: "[1/5] Get the AWX in-cluster postgres pod name"
+      ansible.builtin.shell: >
+        kubectl get pods -n {{ awx_namespace }}
+        -l app.kubernetes.io/component=database
+        --field-selector=status.phase=Running
+        -o jsonpath='{.items[0].metadata.name}'
+      register: postgres_pod
+      changed_when: false
+
+    - name: "[1/5] Show discovered postgres pod name"
+      ansible.builtin.debug:
+        msg: "Found in-cluster postgres pod: {{ postgres_pod.stdout }}"
+
+    - name: "[2/5] Run pg_dump inside the postgres pod (custom format)"
+      ansible.builtin.shell: >
+        kubectl exec -n {{ awx_namespace }} {{ postgres_pod.stdout }}
+        -- pg_dump -U {{ awx_db_user }} -d {{ awx_db_name }}
+        -Fc --no-password -f /tmp/awx_backup.dump
+      changed_when: true
+
+    - name: "[3/5] Copy dump out of the pod to the master node /tmp/"
+      ansible.builtin.shell: >
+        kubectl cp
+        {{ awx_namespace }}/{{ postgres_pod.stdout }}:/tmp/awx_backup.dump
+        {{ awx_dump_remote_path }}
+      changed_when: true
+
+    - name: "[3/5] Verify dump file exists on master node"
+      ansible.builtin.stat:
+        path: "{{ awx_dump_remote_path }}"
+      register: dump_stat
+
+    - name: "[3/5] Fail if dump file is missing or empty"
+      ansible.builtin.fail:
+        msg: "❌ pg_dump file not found or is empty at {{ awx_dump_remote_path }}"
+      when: not dump_stat.stat.exists or dump_stat.stat.size == 0
+
+    - name: "[3/5] Show dump file size"
+      ansible.builtin.debug:
+        msg: "✅ Dump file is {{ dump_stat.stat.size | human_readable }} — ready to transfer."
+
+    - name: "[4/5] Fetch dump from master node to Ansible controller"
+      ansible.builtin.fetch:
+        src: "{{ awx_dump_remote_path }}"
+        dest: "/tmp/awx_backup.dump"
+        flat: true
+
+
+# ═══════════════════════════════════════════════════════════════
+# PLAY 2 — Restore AWX dump into external PostgreSQL on .131
+# Target: infra (192.168.224.131)
+# ═══════════════════════════════════════════════════════════════
+- name: "PLAY 2 — Restore AWX database on external PostgreSQL"
+  hosts: infra
+  become: true
+  gather_facts: false
+
+  vars:
+    restore_dump_path: "/tmp/awx_backup.dump"
+
+  tasks:
+
+    - name: "[1/5] Push the dump file from Ansible controller to infra node"
+      ansible.builtin.copy:
+        src: "/tmp/awx_backup.dump"
+        dest: "{{ restore_dump_path }}"
+        owner: postgres
+        group: postgres
+        mode: "0600"
+
+    - name: "[2/5] Drop existing 'awx' database (clean slate for restore)"
+      community.postgresql.postgresql_db:
+        name: "{{ awx_db_name }}"
+        state: absent
+      become_user: postgres
+
+    - name: "[3/5] Recreate 'awx' database owned by 'awx' user"
+      community.postgresql.postgresql_db:
+        name: "{{ awx_db_name }}"
+        owner: "{{ awx_db_user }}"
+        encoding: UTF8
+        lc_collate: "en_US.UTF-8"
+        lc_ctype: "en_US.UTF-8"
+        template: template0
+        state: present
+      become_user: postgres
+
+    - name: "[4/5] Restore dump using pg_restore (CentOS: full PGDG bin path)"
+      ansible.builtin.shell: >
+        {{ postgres_bin_dir }}/pg_restore
+        -h 127.0.0.1
+        -p {{ postgres_port }}
+        -U {{ awx_db_user }}
+        -d {{ awx_db_name }}
+        --no-owner
+        --no-privileges
+        --exit-on-error
+        {{ restore_dump_path }}
+      environment:
+        PGPASSWORD: "{{ awx_db_password }}"
+      register: pg_restore_result
+      changed_when: true
+
+    - name: "[4/5] Show pg_restore output"
+      ansible.builtin.debug:
+        msg: "{{ pg_restore_result.stderr_lines | default([]) }}"
+
+    - name: "[5/5] Verify data integrity — count tables restored"
+      community.postgresql.postgresql_query:
+        db: "{{ awx_db_name }}"
+        login_user: "{{ awx_db_user }}"
+        login_password: "{{ awx_db_password }}"
+        login_host: "127.0.0.1"
+        login_port: "{{ postgres_port }}"
+        query: >
+          SELECT COUNT(*) AS table_count
+          FROM information_schema.tables
+          WHERE table_schema = 'public';
+      register: table_count
+
+    - name: "[5/5] Print table count (sanity check)"
+      ansible.builtin.debug:
+        msg: >
+          ✅ Restore complete!
+          Tables in public schema: {{ table_count.query_result[0].table_count }}
+
+    - name: "[5/5] Fail if no tables were restored (something went wrong)"
+      ansible.builtin.fail:
+        msg: "❌ No tables found after pg_restore — something went wrong!"
+      when: table_count.query_result[0].table_count | int == 0
+
+    - name: "Clean up dump file from infra node"
+      ansible.builtin.file:
+        path: "{{ restore_dump_path }}"
+        state: absent
+
+
+# ═══════════════════════════════════════════════════════════════
+# PLAY 3 — Create Kubernetes Secret and update AWX CRD
+# Target: k8s_master (192.168.224.129)
+# ═══════════════════════════════════════════════════════════════
+- name: "PLAY 3 — Update AWX Operator to use external PostgreSQL"
+  hosts: k8s_master
+  become: true
+  gather_facts: false
+
+  tasks:
+
+    # ─── Step 1: Create the Kubernetes Secret ─────────────────
+    - name: "[1/6] Remove existing postgres configuration secret (if any)"
+      ansible.builtin.shell: >
+        kubectl delete secret {{ awx_postgres_secret_name }}
+        -n {{ awx_namespace }} --ignore-not-found=true
+      changed_when: true
+
+    - name: "[2/6] Create Kubernetes Secret: awx-postgres-configuration"
+      ansible.builtin.shell: |
+        kubectl create secret generic {{ awx_postgres_secret_name }} \
+          -n {{ awx_namespace }} \
+          --from-literal=host="{{ awx_external_db_host }}" \
+          --from-literal=port="{{ postgres_port }}" \
+          --from-literal=database="{{ awx_db_name }}" \
+          --from-literal=username="{{ awx_db_user }}" \
+          --from-literal=password="{{ awx_db_password }}" \
+          --from-literal=sslmode="prefer" \
+          --from-literal=type="unmanaged"
+      changed_when: true
+      no_log: true    # hide password from console output
+
+    - name: "[2/6] Verify secret was created"
+      ansible.builtin.shell: >
+        kubectl get secret {{ awx_postgres_secret_name }}
+        -n {{ awx_namespace }} -o jsonpath='{.metadata.name}'
+      register: secret_check
+      changed_when: false
+
+    - name: "[2/6] Show secret verification"
+      ansible.builtin.debug:
+        msg: "✅ Secret '{{ secret_check.stdout }}' created in namespace '{{ awx_namespace }}'"
+
+    # ─── Step 2: Render and apply the updated AWX CRD ─────────
+    - name: "[3/6] Render updated awx.yaml from template"
+      ansible.builtin.template:
+        src: "templates/awx-external-db.yaml.j2"
+        dest: "/tmp/awx-external-db.yaml"
+        mode: "0644"
+
+    - name: "[4/6] Apply updated AWX Custom Resource (external DB)"
+      ansible.builtin.shell: >
+        kubectl apply -f /tmp/awx-external-db.yaml
+      register: crd_apply
+      changed_when: "'configured' in crd_apply.stdout or 'created' in crd_apply.stdout"
+
+    - name: "[4/6] Show CRD apply result"
+      ansible.builtin.debug:
+        msg: "{{ crd_apply.stdout }}"
+
+    # ─── Step 3: Wait for AWX Operator to reconcile ───────────
+    - name: "[5/6] Wait for AWX Operator to begin reconciliation (15s)"
+      ansible.builtin.pause:
+        seconds: 15
+
+    - name: "[5/6] Wait for AWX web pod to be Running (up to 10 min)"
+      ansible.builtin.shell: >
+        kubectl wait pod
+        -l app.kubernetes.io/name={{ awx_cr_name }}
+        -l app.kubernetes.io/component=web
+        -n {{ awx_namespace }}
+        --for=condition=Ready
+        --timeout=600s
+      register: wait_result
+      changed_when: false
+
+    - name: "[5/6] Wait for AWX task pod to be Running (up to 10 min)"
+      ansible.builtin.shell: >
+        kubectl wait pod
+        -l app.kubernetes.io/name={{ awx_cr_name }}
+        -l app.kubernetes.io/component=task
+        -n {{ awx_namespace }}
+        --for=condition=Ready
+        --timeout=600s
+      register: wait_task_result
+      changed_when: false
+
+    - name: "[5/6] Confirm in-cluster postgres pod is gone"
+      ansible.builtin.shell: >
+        kubectl get pods -n {{ awx_namespace }}
+        -l app.kubernetes.io/component=database
+        --no-headers 2>/dev/null | wc -l
+      register: postgres_pod_count
+      changed_when: false
+
+    - name: "[5/6] Show in-cluster postgres pod status"
+      ansible.builtin.debug:
+        msg: >
+          In-cluster postgres pods remaining: {{ postgres_pod_count.stdout | trim }}
+          (Expected: 0 — operator will have removed it)
+
+    # ─── Step 4: Final AWX health check ───────────────────────
+    - name: "[6/6] Get AWX NodePort to run health check"
+      ansible.builtin.shell: >
+        kubectl get svc -n {{ awx_namespace }}
+        -l app.kubernetes.io/name={{ awx_cr_name }}
+        -o jsonpath='{.items[0].spec.ports[?(@.name=="http")].nodePort}'
+      register: awx_nodeport
+      changed_when: false
+
+    - name: "[6/6] Run AWX /api/v2/ping/ health check"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ awx_nodeport.stdout }}/api/v2/ping/"
+        method: GET
+        return_content: true
+        status_code: 200
+        timeout: 30
+      register: ping_result
+      retries: 5
+      delay: 10
+      until: ping_result.status == 200
+
+    - name: "[6/6] Print AWX ping response"
+      ansible.builtin.debug:
+        msg: "{{ ping_result.json }}"
+
+    - name: "🎉 MIGRATION COMPLETE"
+      ansible.builtin.debug:
+        msg: |
+          ══════════════════════════════════════════════════════
+          ✅  AWX is now using the external PostgreSQL database!
+
+          Database host : {{ awx_external_db_host }}:{{ postgres_port }}
+          Database name : {{ awx_db_name }}
+          AWX namespace : {{ awx_namespace }}
+          AWX ping      : {{ ping_result.json.ha }}
+
+          Next steps:
+           1. Log into AWX UI and verify job history is intact
+           2. Run a test job template via the .130 receptor node
+           3. Check Grafana — postgres pod should be gone from dashboard
+          ══════════════════════════════════════════════════════
+
+    - name: "Clean up rendered CRD file from master node"
+      ansible.builtin.file:
+        path: "/tmp/awx-external-db.yaml"
+        state: absent

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ansible Mastery & Interactive Practice Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo">A</div>
+        <div>
+          <h1>Ansible Deep Learning & Interactive Lab</h1>
+          <p class="subtitle">Master Agentless Automation, Playbooks, Roles & Inventory Architecture</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-red">Agentless SSH</span>
+        <span class="badge badge-blue">Idempotent</span>
+        <span class="badge badge-purple">YAML Driven</span>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="architecture">🏗️ 1. Architecture & Core</button>
+      <button class="tab-btn" data-tab="inventory">📋 2. Inventory & Variables</button>
+      <button class="tab-btn" data-tab="simulator">⚡ 3. Playbook Simulator</button>
+      <button class="tab-btn" data-tab="modules">📚 4. Core Modules Cheat Sheet</button>
+      <button class="tab-btn" data-tab="roles">📁 5. Roles & Galaxy</button>
+      <button class="tab-btn" data-tab="vault">🔒 6. Vault & Security</button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+
+      <!-- TAB 1: Architecture -->
+      <section id="architecture" class="tab-content active">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Ansible Agentless Architecture</h2>
+            <p>Ansible connects to target machines using standard <strong>SSH</strong> (for Linux/Unix) or <strong>WinRM/PSRP</strong> (for Windows), executes small python/powershell scripts (modules) on the target, and removes them when finished. No agent daemon needs to be installed on target nodes!</p>
+
+            <div class="architecture-diagram">
+              <div class="arch-box control-node">
+                <span class="arch-icon">💻</span>
+                <h3>Control Node</h3>
+                <p>Linux/macOS with Ansible installed</p>
+                <div class="arch-sub-box">
+                  <code>ansible.cfg</code> | <code>Inventory</code> | <code>Playbooks</code>
+                </div>
+              </div>
+              <div class="arch-connections">
+                <div class="conn-line">SSH (Port 22) ⚡</div>
+                <div class="conn-line">SSH (Port 22) ⚡</div>
+                <div class="conn-line">WinRM (5986) ⚡</div>
+              </div>
+              <div class="arch-targets">
+                <div class="arch-box target-node">
+                  <span class="arch-icon">🐧</span>
+                  <h4>web-server-1</h4>
+                  <small>192.168.1.10 (Ubuntu)</small>
+                </div>
+                <div class="arch-box target-node">
+                  <span class="arch-icon">🐧</span>
+                  <h4>web-server-2</h4>
+                  <small>192.168.1.11 (Debian)</small>
+                </div>
+                <div class="arch-box target-node">
+                  <span class="arch-icon">🗄️</span>
+                  <h4>db-server-1</h4>
+                  <small>192.168.1.20 (RHEL)</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Key Fundamental Concepts</h2>
+            <div class="concept-list">
+              <div class="concept-item">
+                <div class="concept-title">🔄 Idempotency</div>
+                <div class="concept-desc">Executing a playbook 1 time or 100 times yields the exact same state without unintended side effects. If configuration is already correct, Ansible makes 0 changes (returns <code>ok</code> instead of <code>changed</code>).</div>
+              </div>
+              <div class="concept-item">
+                <div class="concept-title">📝 Declarative Syntax</div>
+                <div class="concept-desc">You specify <em>what state</em> you want your systems to be in (e.g. <code>state: present</code>, <code>state: started</code>), rather than scripting imperatively how to install or configure it step-by-step.</div>
+              </div>
+              <div class="concept-item">
+                <div class="concept-title">🔍 Fact Gathering</div>
+                <div class="concept-desc">Before running tasks, Ansible automatically runs the <code>setup</code> module to collect target system facts (IP addresses, OS version, CPU count, disk space) into the <code>ansible_facts</code> variable.</div>
+              </div>
+              <div class="concept-item">
+                <div class="concept-title">⚡ Order of Precedence (ansible.cfg)</div>
+                <div class="concept-desc">
+                  1. <code>ANSIBLE_CONFIG</code> (environment variable)<br>
+                  2. <code>./ansible.cfg</code> (current working directory)<br>
+                  3. <code>~/.ansible.cfg</code> (user's home directory)<br>
+                  4. <code>/etc/ansible/ansible.cfg</code> (system default)
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Inventory & Variables -->
+      <section id="inventory" class="tab-content">
+        <div class="grid-2col">
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Visual Inventory & Group Variables Builder</h2>
+              <div class="format-toggle">
+                <button id="fmt-ini" class="toggle-btn active">INI Format</button>
+                <button id="fmt-yaml" class="toggle-btn">YAML Format</button>
+              </div>
+            </div>
+            
+            <div class="inventory-controls">
+              <label>Select Architecture Topology:</label>
+              <select id="topology-select">
+                <option value="web-db">Web + Database Cluster</option>
+                <option value="multi-env">Multi-Environment (Staging + Prod)</option>
+                <option value="cloud-k8s">K8s Control Plane & Worker Nodes</option>
+              </select>
+            </div>
+
+            <pre class="code-block"><code id="inventory-preview"></code></pre>
+          </div>
+
+          <div class="card">
+            <h2>Variable Precedence Hierarchy (Top to Bottom)</h2>
+            <p>Ansible has 22 levels of variable precedence. Higher levels override lower levels!</p>
+            <div class="precedence-ladder">
+              <div class="ladder-step level-high">1. Extra Vars (<code>-e "var=value"</code>) - HIGHEST</div>
+              <div class="ladder-step level-high">2. Task vars (only inside task)</div>
+              <div class="ladder-step level-mid">3. Block vars</div>
+              <div class="ladder-step level-mid">4. Role and include vars</div>
+              <div class="ladder-step level-mid">5. Set_fact / Registered vars</div>
+              <div class="ladder-step level-mid">6. Play vars / vars_files</div>
+              <div class="ladder-step level-low">7. Host facts (<code>ansible_facts</code>)</div>
+              <div class="ladder-step level-low">8. <code>host_vars/</code> directory files</div>
+              <div class="ladder-step level-low">9. <code>group_vars/</code> directory files</div>
+              <div class="ladder-step level-low">10. Role defaults (<code>roles/x/defaults/main.yml</code>) - LOWEST</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Playbook Simulator -->
+      <section id="simulator" class="tab-content">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Interactive Playbook Executor</h2>
+            <div class="sim-controls">
+              <label for="playbook-select">Select Playbook Scenario:</label>
+              <select id="playbook-select">
+                <option value="nginx">01. Install & Configure Nginx Web Server</option>
+                <option value="db">02. Provision PostgreSQL Database & Users</option>
+                <option value="users">03. User Management & SSH Key Hardening</option>
+                <option value="handler">04. Trigger Handlers on Template Config Change</option>
+              </select>
+              <button id="run-playbook-btn" class="btn btn-primary">▶ Run Playbook (ansible-playbook)</button>
+              <button id="reset-sim-btn" class="btn btn-secondary">🔄 Reset Target State</button>
+            </div>
+
+            <pre class="code-block"><code id="playbook-code"></code></pre>
+          </div>
+
+          <div class="card">
+            <h2>Execution Terminal & Node State</h2>
+            <div class="terminal-window">
+              <div class="terminal-header">
+                <span class="dot red"></span>
+                <span class="dot yellow"></span>
+                <span class="dot green"></span>
+                <span class="terminal-title">ansible-playbook -i inventory.ini site.yml</span>
+              </div>
+              <div class="terminal-body" id="terminal-output">
+                <div class="term-line">Ready to execute. Click "Run Playbook" to observe Ansible idempotency and state changes.</div>
+              </div>
+            </div>
+
+            <h3 style="margin-top: 1rem;">Target Nodes Status Monitor</h3>
+            <div class="nodes-grid" id="nodes-status-grid">
+              <!-- Nodes rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Core Modules Cheat Sheet -->
+      <section id="modules" class="tab-content">
+        <div class="card">
+          <div class="card-header-flex">
+            <h2>Ansible Core Modules Explorer</h2>
+            <input type="text" id="module-search" placeholder="Search modules (e.g. template, apt, service, user)..." class="search-input">
+          </div>
+
+          <div class="modules-grid" id="modules-grid">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: Roles & Galaxy -->
+      <section id="roles" class="tab-content">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Standard Ansible Role Directory Structure</h2>
+            <p>Roles provide a structured, reusable way to organize tasks, handlers, variables, defaults, templates, and files.</p>
+            <pre class="code-block"><code>roles/webserver/
+├── defaults/
+│   └── main.yml         # Low-priority default variables
+├── vars/
+│   └── main.yml         # High-priority role variables
+├── tasks/
+│   └── main.yml         # Main task list executed by role
+├── handlers/
+│   └── main.yml         # Handlers notified by tasks
+├── templates/
+│   └── nginx.conf.j2    # Jinja2 template files
+├── files/
+│   └── index.html       # Static files to copy
+└── meta/
+    └── main.yml         # Role metadata & dependencies</code></pre>
+          </div>
+
+          <div class="card">
+            <h2>Ansible Galaxy Commands Cheat Sheet</h2>
+            <div class="concept-list">
+              <div class="concept-item">
+                <code>ansible-galaxy role init roles/my_new_role</code>
+                <div class="concept-desc">Initializes standard folder structure for a new role.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-galaxy collection install community.general</code>
+                <div class="concept-desc">Installs Ansible collection containing additional community modules.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-galaxy install -r requirements.yml</code>
+                <div class="concept-desc">Installs all roles and collections declared in a requirements file.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: Vault & Security -->
+      <section id="vault" class="tab-content">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Ansible Vault (Encrypting Secrets)</h2>
+            <p>Ansible Vault allows you to encrypt password strings, API keys, or entire YAML secret files so they can be safely stored in version control (Git).</p>
+
+            <div class="vault-demo">
+              <h3>Interactive Vault Text Encrypter / Decrypter</h3>
+              <div class="form-group">
+                <label>Secret Key / Password:</label>
+                <input type="text" id="vault-pass" value="SuperSecretVaultPassword123" class="text-input">
+              </div>
+              <div class="form-group">
+                <label>Unencrypted Content (YAML):</label>
+                <textarea id="vault-raw" class="code-textarea">db_password: "MyProductionDBPassword2026!"
+api_token: "sk-live-99201938210398123"</textarea>
+              </div>
+              <button id="btn-encrypt-vault" class="btn btn-primary">🔐 Encrypt with Ansible Vault</button>
+              <button id="btn-decrypt-vault" class="btn btn-secondary">🔓 Decrypt Vault</button>
+
+              <div class="form-group" style="margin-top: 1rem;">
+                <label>Encrypted Ansible Vault Output (<code>$ANSIBLE_VAULT;1.1;AES256</code>):</label>
+                <pre class="code-block"><code id="vault-output">Click Encrypt to generate Vault header & ciphertext</code></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Ansible Vault CLI Commands</h2>
+            <div class="concept-list">
+              <div class="concept-item">
+                <code>ansible-vault create group_vars/all/vault.yml</code>
+                <div class="concept-desc">Creates a new encrypted file.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-vault encrypt group_vars/all/secrets.yml</code>
+                <div class="concept-desc">Encrypts an existing file in-place.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-vault edit group_vars/all/secrets.yml</code>
+                <div class="concept-desc">Decrypts temporary file in editor, then re-encrypts upon save.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-playbook site.yml --ask-vault-pass</code>
+                <div class="concept-desc">Runs playbook asking interactively for vault password.</div>
+              </div>
+              <div class="concept-item">
+                <code>ansible-playbook site.yml --vault-password-file ~/.vault_pass</code>
+                <div class="concept-desc">Passes vault password non-interactively for CI/CD automation.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

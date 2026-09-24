@@ -1,0 +1,25 @@
+---
+# Playbook: 04-simple-block-rescue-always.yml
+# Simple Example: Installing software with fallbacks and mandatory cleanup
+- name: Simple Web Server Setup with Fallback
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Web Server Package Installation
+      block:
+        - name: Primary Option: Try installing Nginx
+          ansible.builtin.apt:
+            name: nginx
+            state: present
+
+      rescue:
+        - name: Fallback Option: If Nginx fails, install Apache instead
+          ansible.builtin.apt:
+            name: apache2
+            state: present
+
+      always:
+        - name: Mandatory Cleanup: Update package manager cache
+          ansible.builtin.apt:
+            update_cache: yes

@@ -1,0 +1,5 @@
+---
+# Method 1: Using group_vars/all.yml (Global shared variables)
+web_port: 8080
+db_name: "production_db"
+app_version: "2.4.0"

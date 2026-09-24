@@ -1,0 +1,27 @@
+---
+# ─────────────────────────────────────────────────────────────
+# Group Variables — k8s_master (192.168.224.129)
+# AWX Operator + k3s cluster settings
+# ─────────────────────────────────────────────────────────────
+
+# AWX Operator Kubernetes namespace
+awx_namespace: awx
+
+# AWX Custom Resource name (must match what's deployed)
+awx_cr_name: awx
+
+# Name of the Kubernetes secret the AWX Operator will read
+awx_postgres_secret_name: awx-postgres-configuration
+
+# External PostgreSQL connection details (points to .131)
+awx_external_db_host: "192.168.224.131"
+awx_db_name: awx
+awx_db_user: awx
+awx_db_password: "{{ vault_awx_db_password }}"
+postgres_port: 5432
+
+# Local path on the master node for the pg_dump archive
+awx_dump_remote_path: "/tmp/awx_backup.dump"
+
+# AWX health check URL (via localhost NodePort or ClusterIP)
+awx_health_check_url: "http://localhost/api/v2/ping/"

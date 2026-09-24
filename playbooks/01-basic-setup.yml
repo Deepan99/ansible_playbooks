@@ -1,0 +1,43 @@
+---
+# Playbook: 01-basic-setup.yml
+# Demonstrates: System package updates, user management, and service enablement
+- name: Infrastructure Base Setup & Hardening
+  hosts: all
+  become: true
+  vars:
+    required_packages:
+      - curl
+      - git
+      - htop
+      - ufw
+      - unzip
+
+  tasks:
+    - name: Update apt repository cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Ensure baseline system utilities are installed
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ required_packages }}"
+
+    - name: Ensure sysadmin group exists
+      ansible.builtin.group:
+        name: sysadmin
+        state: present
+
+    - name: Create operator user account
+      ansible.builtin.user:
+        name: operator
+        group: sysadmin
+        shell: /bin/bash
+        create_home: true
+
+    - name: Enable Firewall (UFW)
+      ansible.builtin.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming

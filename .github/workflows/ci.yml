@@ -1,0 +1,42 @@
+name: Ansible CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  ansible-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: pip install ansible ansible-lint
+        
+      - name: Run ansible-lint
+        run: ansible-lint playbooks/ roles/
+
+  molecule-tests:
+    needs: ansible-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: pip install ansible molecule molecule-plugins[docker] docker
+        
+      - name: Run Molecule tests for common role
+        working-directory: ./roles/common
+        run: molecule test

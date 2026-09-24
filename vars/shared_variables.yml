@@ -1,0 +1,4 @@
+---
+# Method 2: Separate dedicated variable file
+shared_domain: "api.example.com"
+backend_service_port: 9000

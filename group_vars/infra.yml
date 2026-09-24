@@ -1,0 +1,30 @@
+---
+# ─────────────────────────────────────────────────────────────
+# Group Variables — infra (192.168.224.131) — CentOS
+# PostgreSQL 15 external database for AWX
+# ─────────────────────────────────────────────────────────────
+
+# PostgreSQL version to install
+postgres_version: 15
+
+# AWX database credentials (password sourced from Ansible Vault)
+awx_db_name: awx
+awx_db_user: awx
+awx_db_password: "{{ vault_awx_db_password }}"
+
+# Network config: allow connections from the k3s master node subnet
+awx_k8s_master_ip: "192.168.224.129"
+awx_allowed_subnet: "192.168.224.0/24"
+postgres_port: 5432
+
+# ── CentOS / RHEL PostgreSQL paths ──────────────────────────
+# On CentOS/RHEL with PGDG RPM, both config files live in the
+# data directory (unlike Ubuntu which uses /etc/postgresql/)
+postgres_data_dir: "/var/lib/pgsql/15/data"
+postgres_conf_dir: "/var/lib/pgsql/15/data"   # pg_hba.conf lives here
+
+# CentOS systemd service name for PG15 (PGDG RPM naming)
+postgres_service: "postgresql-15"
+
+# Full path to PG binaries (PGDG RPM installs to /usr/pgsql-15/bin/)
+postgres_bin_dir: "/usr/pgsql-15/bin"

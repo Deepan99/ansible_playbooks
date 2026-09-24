@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Managed by Ansible - {{ server_name }}</title>
+</head>
+<body>
+    <h1>Welcome to {{ server_name }}!</h1>
+    <p>This web node was provisioned automatically using <strong>Ansible Agentless Automation</strong>.</p>
+    <ul>
+        <li><strong>Host FQDN:</strong> {{ ansible_facts['fqdn'] }}</li>
+        <li><strong>IP Address:</strong> {{ ansible_facts['default_ipv4']['address'] }}</li>
+        <li><strong>Operating System:</strong> {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}</li>
+    </ul>
+</body>
+</html>

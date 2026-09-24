@@ -1,0 +1,209 @@
+---
+# ═══════════════════════════════════════════════════════════════
+# Playbook 06 — Provision PostgreSQL 15 on .131 (CentOS infra node)
+#
+# What this does:
+#   1. Installs PostgreSQL 15 from the official PGDG RPM repo
+#   2. Disables the built-in CentOS postgresql DNF module
+#   3. Initializes the database cluster (initdb)
+#   4. Configures postgresql.conf → listen_addresses = '*'
+#   5. Adds a scoped pg_hba.conf rule for the AWX subnet
+#   6. Creates the 'awx' user and 'awx' database
+#   7. Opens firewalld port 5432
+#   8. Validates connectivity with pg_isready
+#
+# Run with:
+#   ansible-playbook playbooks/06-provision-postgres.yml \
+#     -i inventories/production/hosts.ini \
+#     -e @vars/vault.yml --ask-vault-pass
+# ═══════════════════════════════════════════════════════════════
+
+- name: Provision PostgreSQL 15 External Database (CentOS)
+  hosts: infra
+  become: true
+  gather_facts: true
+
+  vars:
+    pg_hba_conf: "{{ postgres_conf_dir }}/pg_hba.conf"
+    postgresql_conf: "{{ postgres_conf_dir }}/postgresql.conf"
+    pg_version_file: "{{ postgres_data_dir }}/PG_VERSION"
+
+  tasks:
+
+    # ─── Step 1: Install PGDG RPM Repository ─────────────────
+    - name: Install PostgreSQL 15 PGDG RPM repository
+      ansible.builtin.dnf:
+        name: >-
+          https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{
+          ansible_distribution_major_version }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+        state: present
+        disable_gpg_check: true
+
+    - name: Disable the built-in CentOS postgresql DNF module (prevents conflicts)
+      ansible.builtin.shell: dnf module disable postgresql -y
+      register: module_disable
+      changed_when: "'Disabling' in module_disable.stdout"
+      failed_when: false   # module may not exist on some versions
+
+    # ─── Step 2: Install EPEL (needed for python3-psycopg2) ───
+    - name: Install EPEL release (CentOS)
+      ansible.builtin.dnf:
+        name: epel-release
+        state: present
+
+    # ─── Step 3: Install PostgreSQL 15 packages ───────────────
+    - name: Install PostgreSQL 15 server, client, and Python binding
+      ansible.builtin.dnf:
+        name:
+          - "postgresql15-server"
+          - "postgresql15"
+          - "python3-psycopg2"
+        state: present
+        update_cache: true
+
+    # ─── Step 4: Initialize database cluster (first run only) ─
+    - name: Check if PostgreSQL data cluster is already initialized
+      ansible.builtin.stat:
+        path: "{{ pg_version_file }}"
+      register: pg_initialized
+
+    - name: Initialize PostgreSQL 15 database cluster
+      ansible.builtin.shell: "{{ postgres_bin_dir }}/postgresql-15-setup initdb"
+      when: not pg_initialized.stat.exists
+      changed_when: true
+
+    # ─── Step 5: Start and enable the service ─────────────────
+    - name: Start and enable PostgreSQL 15 service
+      ansible.builtin.systemd:
+        name: "{{ postgres_service }}"
+        state: started
+        enabled: true
+
+    # ─── Step 6: Configure postgresql.conf ────────────────────
+    - name: Set listen_addresses = '*' in postgresql.conf
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf }}"
+        regexp: "^#?listen_addresses\\s*="
+        line: "listen_addresses = '*'"
+        backup: true
+      notify: Restart PostgreSQL
+
+    - name: Set max_connections = 200 in postgresql.conf
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_conf }}"
+        regexp: "^#?max_connections\\s*="
+        line: "max_connections = 200"
+      notify: Restart PostgreSQL
+
+    # ─── Step 7: Configure pg_hba.conf ────────────────────────
+    - name: Remove any pre-existing awx entry from pg_hba.conf (idempotent)
+      ansible.builtin.lineinfile:
+        path: "{{ pg_hba_conf }}"
+        regexp: "^host\\s+awx\\s+awx\\s+"
+        state: absent
+      notify: Restart PostgreSQL
+
+    - name: Add AWX subnet rule to pg_hba.conf (scram-sha-256 auth)
+      ansible.builtin.lineinfile:
+        path: "{{ pg_hba_conf }}"
+        line: "host    awx             awx             {{ awx_allowed_subnet }}          scram-sha-256"
+        insertafter: "^# IPv4 local connections"
+        backup: true
+      notify: Restart PostgreSQL
+
+    # ─── Flush handlers before creating DB objects ────────────
+    - name: Flush handlers to apply postgresql.conf changes
+      ansible.builtin.meta: flush_handlers
+
+    # ─── Step 8: Create AWX user and database ─────────────────
+    - name: Create 'awx' PostgreSQL user
+      community.postgresql.postgresql_user:
+        name: "{{ awx_db_user }}"
+        password: "{{ awx_db_password }}"
+        role_attr_flags: NOSUPERUSER,NOCREATEDB,NOCREATEROLE
+        state: present
+      become_user: postgres
+
+    - name: Create 'awx' PostgreSQL database (UTF-8, template0)
+      community.postgresql.postgresql_db:
+        name: "{{ awx_db_name }}"
+        owner: "{{ awx_db_user }}"
+        encoding: UTF8
+        lc_collate: "en_US.UTF-8"
+        lc_ctype: "en_US.UTF-8"
+        template: template0
+        state: present
+      become_user: postgres
+
+    - name: Grant all privileges on 'awx' database to 'awx' user
+      community.postgresql.postgresql_privs:
+        database: "{{ awx_db_name }}"
+        role: "{{ awx_db_user }}"
+        privs: ALL
+        type: database
+        state: present
+      become_user: postgres
+
+    # ─── Step 9: Open firewalld port 5432 ─────────────────────
+    - name: Check if firewalld is running
+      ansible.builtin.systemd:
+        name: firewalld
+      register: firewalld_status
+      failed_when: false
+
+    - name: Allow port 5432/tcp through firewalld (for AWX subnet)
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="ipv4"
+          source address="{{ awx_allowed_subnet }}"
+          port port="{{ postgres_port }}" protocol="tcp" accept
+        permanent: true
+        state: enabled
+        immediate: true
+      when: firewalld_status.status.ActiveState is defined and
+            firewalld_status.status.ActiveState == "active"
+
+    # ─── Step 10: Validation ──────────────────────────────────
+    - name: Wait for PostgreSQL to be listening on port {{ postgres_port }}
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ postgres_port }}"
+        timeout: 30
+
+    - name: Run pg_isready health check
+      ansible.builtin.command: >
+        {{ postgres_bin_dir }}/pg_isready
+        -h 127.0.0.1
+        -p {{ postgres_port }}
+        -U {{ awx_db_user }}
+        -d {{ awx_db_name }}
+      register: pg_ready
+      changed_when: false
+
+    - name: Show pg_isready result
+      ansible.builtin.debug:
+        msg: "{{ pg_ready.stdout }}"
+
+    - name: Verify AWX database is accessible with credentials
+      community.postgresql.postgresql_query:
+        db: "{{ awx_db_name }}"
+        login_user: "{{ awx_db_user }}"
+        login_password: "{{ awx_db_password }}"
+        login_host: "127.0.0.1"
+        login_port: "{{ postgres_port }}"
+        query: "SELECT current_database(), current_user, version();"
+      register: db_check
+
+    - name: Print database verification result
+      ansible.builtin.debug:
+        msg: >
+          ✅ PostgreSQL 15 on CentOS (.131) is ready!
+          DB={{ db_check.query_result[0].current_database }}
+          User={{ db_check.query_result[0].current_user }}
+
+  # ─── Handlers ───────────────────────────────────────────────
+  handlers:
+    - name: Restart PostgreSQL
+      ansible.builtin.systemd:
+        name: "{{ postgres_service }}"
+        state: restarted

@@ -1,0 +1,52 @@
+---
+# ═══════════════════════════════════════════════════════════════
+# AWX CRD Jinja2 Template — awx-external-db.yaml.j2
+#
+# This template generates the updated AWX Custom Resource that
+# points the AWX Operator at the external PostgreSQL database
+# on 192.168.224.131 instead of the in-cluster pod.
+#
+# Key field: postgres_configuration_secret
+#   → Tells the AWX Operator to use our external Kubernetes
+#     Secret (awx-postgres-configuration) for DB credentials.
+#     The operator will stop managing the in-cluster postgres pod.
+# ═══════════════════════════════════════════════════════════════
+apiVersion: awx.ansible.com/v1beta1
+kind: AWX
+metadata:
+  name: {{ awx_cr_name }}
+  namespace: {{ awx_namespace }}
+spec:
+  # ── Service type: keep NodePort so UI stays accessible ──────
+  service_type: nodeport
+
+  # ── External Database Configuration ─────────────────────────
+  # Reference the Kubernetes Secret containing external DB creds.
+  # 'type: unmanaged' in the secret signals the operator to NOT
+  # create or manage an in-cluster postgres StatefulSet.
+  postgres_configuration_secret: {{ awx_postgres_secret_name }}
+
+  # ── Resource requests (tuned for .129 after DB offload) ─────
+  web_resource_requirements:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  task_resource_requirements:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+  ee_resource_requirements:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi

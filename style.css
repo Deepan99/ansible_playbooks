@@ -1,0 +1,507 @@
+:root {
+  --bg-dark: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-hover: #334155;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #334155;
+  
+  --ansible-red: #ee0000;
+  --accent-blue: #38bdf8;
+  --accent-green: #4ade80;
+  --accent-yellow: #facc15;
+  --accent-purple: #c084fc;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Fira Code', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  line-height: 1.6;
+  padding: 1.5rem;
+}
+
+.app-container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo {
+  width: 48px;
+  height: 48px;
+  background: radial-gradient(circle at 30% 30%, #ff4d4d, var(--ansible-red));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.75rem;
+  color: white;
+  box-shadow: 0 4px 20px rgba(238, 0, 0, 0.4);
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.header-badges {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-red { background: rgba(238, 0, 0, 0.2); color: #ff6b6b; border: 1px solid rgba(238, 0, 0, 0.4); }
+.badge-blue { background: rgba(56, 189, 248, 0.2); color: var(--accent-blue); border: 1px solid rgba(56, 189, 248, 0.4); }
+.badge-purple { background: rgba(192, 132, 252, 0.2); color: var(--accent-purple); border: 1px solid rgba(192, 132, 252, 0.4); }
+
+.nav-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.tab-btn {
+  background: var(--bg-card);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 0.65rem 1.2rem;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+}
+
+.tab-btn.active {
+  background: var(--ansible-red);
+  color: white;
+  border-color: var(--ansible-red);
+  box-shadow: 0 4px 12px rgba(238, 0, 0, 0.3);
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 992px) {
+  .grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.card h2 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-main);
+}
+
+.card p {
+  color: var(--text-muted);
+  font-size: 0.925rem;
+  margin-bottom: 1rem;
+}
+
+/* Architecture Diagram */
+.architecture-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-dark);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+  border: 1px dashed var(--border-color);
+}
+
+.arch-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.control-node {
+  border-color: var(--ansible-red);
+  width: 100%;
+  max-width: 320px;
+}
+
+.arch-icon {
+  font-size: 1.75rem;
+  display: block;
+}
+
+.arch-sub-box {
+  margin-top: 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: var(--accent-yellow);
+}
+
+.arch-connections {
+  display: flex;
+  gap: 1rem;
+}
+
+.conn-line {
+  font-size: 0.75rem;
+  color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.1);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.arch-targets {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.target-node {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+/* Concept Cards */
+.concept-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.concept-item {
+  background: var(--bg-dark);
+  padding: 1rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--accent-blue);
+}
+
+.concept-title {
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.25rem;
+}
+
+.concept-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Code Blocks */
+.code-block {
+  background: #090d16;
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  overflow-x: auto;
+  border: 1px solid #1e293b;
+  max-height: 420px;
+}
+
+code {
+  font-family: var(--font-mono);
+  color: var(--accent-yellow);
+}
+
+/* Precedence Ladder */
+.precedence-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ladder-step {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.level-high { background: rgba(238, 0, 0, 0.15); border-left: 4px solid var(--ansible-red); color: #ff8888; }
+.level-mid  { background: rgba(250, 204, 21, 0.15); border-left: 4px solid var(--accent-yellow); color: #ffe066; }
+.level-low  { background: rgba(56, 189, 248, 0.15); border-left: 4px solid var(--accent-blue); color: #93c5fd; }
+
+/* Buttons & Inputs */
+.btn {
+  padding: 0.65rem 1.2rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background: var(--ansible-red);
+  color: white;
+}
+.btn-primary:hover { background: #cc0000; }
+
+.btn-secondary {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+}
+.btn-secondary:hover { background: #475569; }
+
+.card-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.format-toggle {
+  display: flex;
+  background: var(--bg-dark);
+  padding: 0.2rem;
+  border-radius: 6px;
+}
+
+.toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.3rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  background: var(--bg-card-hover);
+  color: white;
+}
+
+.inventory-controls, .sim-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+select, .text-input, .search-input {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+select:focus, .text-input:focus, .search-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.search-input {
+  width: 280px;
+}
+
+/* Terminal Window */
+.terminal-window {
+  background: #050811;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  font-family: var(--font-mono);
+}
+
+.terminal-header {
+  background: #0f172a;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.dot.red { background: #ef4444; }
+.dot.yellow { background: #f59e0b; }
+.dot.green { background: #10b981; }
+
+.terminal-title {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
+}
+
+.terminal-body {
+  padding: 1rem;
+  height: 280px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.term-line {
+  margin-bottom: 0.3rem;
+}
+.term-line.ok { color: var(--accent-green); }
+.term-line.changed { color: var(--accent-yellow); }
+.term-line.failed { color: #f87171; }
+.term-line.play { color: var(--accent-blue); font-weight: bold; }
+
+/* Nodes Status Grid */
+.nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.node-card {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.node-card.updated {
+  border-color: var(--accent-yellow);
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);
+}
+
+.node-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 0.3rem;
+}
+
+/* Modules Grid */
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.module-card {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.module-name {
+  font-family: var(--font-mono);
+  color: var(--accent-blue);
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.module-category {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+/* Vault Form */
+.vault-demo {
+  background: var(--bg-dark);
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.code-textarea {
+  background: #090d16;
+  border: 1px solid var(--border-color);
+  color: var(--accent-yellow);
+  padding: 0.8rem;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  height: 90px;
+  resize: vertical;
+}

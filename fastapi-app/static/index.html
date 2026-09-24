@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FastAPI Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-group">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>FastAPI Control Center</h1>
+          <p>Local REST API Engine & Real-time Task Manager</p>
+        </div>
+      </div>
+      <div class="nav-links">
+        <a href="/docs" target="_blank" class="btn-link">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+          Swagger Docs (/docs)
+        </a>
+        <a href="/redoc" target="_blank" class="btn-link">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          ReDoc (/redoc)
+        </a>
+      </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="label">Total Tasks</div>
+        <div class="val stat-total" id="stat-total">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Completed</div>
+        <div class="val stat-completed" id="stat-completed">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Pending</div>
+        <div class="val stat-pending" id="stat-pending">0</div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="main-grid">
+      <!-- Left Panel: Create Form -->
+      <div class="panel-card">
+        <h2>Create New Item</h2>
+        <form id="createForm">
+          <div class="form-group">
+            <label for="title">Title *</label>
+            <input type="text" id="title" class="form-control" placeholder="e.g. Test OAuth Authentication" required>
+          </div>
+
+          <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" class="form-control" placeholder="Brief detail about this item..."></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="category">Category</label>
+              <select id="category" class="form-control">
+                <option value="General">General</option>
+                <option value="Development">Development</option>
+                <option value="Learning">Learning</option>
+                <option value="DevOps">DevOps</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="priority">Priority</label>
+              <select id="priority" class="form-control">
+                <option value="High">High</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <button type="submit" class="btn-primary">+ Add Item</button>
+        </form>
+      </div>
+
+      <!-- Right Panel: Items List -->
+      <div class="panel-card">
+        <h2>
+          <span>Items Registry</span>
+          <span id="items-count" style="font-size: 0.85rem; color: var(--text-muted); font-weight: normal;"></span>
+        </h2>
+
+        <div class="filters-bar">
+          <button class="filter-chip active" onclick="setFilter('all')">All</button>
+          <button class="filter-chip" onclick="setFilter('pending')">Pending</button>
+          <button class="filter-chip" onclick="setFilter('completed')">Completed</button>
+        </div>
+
+        <div class="item-list" id="itemList">
+          <div class="empty-state">Loading items from FastAPI backend...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+---
+- name: Ping all target nodes
+  ansible.builtin.ping:
+
+- name: Collect target node system facts
+  ansible.builtin.setup:

@@ -1,0 +1,44 @@
+---
+# Playbook: 03-block-rescue-always.yml
+# Demonstrates: Exception handling, rollback logic, and cleanup tasks in Ansible
+- name: Production Database Migration & Backup with Error Handling
+  hosts: dbservers
+  become: true
+
+  tasks:
+    - name: Execute Database Upgrade inside Block-Rescue-Always Structure
+      block:
+        - name: 1. Attempt to connect to Database Service
+          ansible.builtin.command:
+            cmd: echo "Attempting DB Migration..."
+
+        - name: 2. Intentional Failure Simulation (Simulates broken migration script)
+          ansible.builtin.command:
+            cmd: ls /non_existent_directory_trigger_error
+
+        - name: 3. Post-migration cleanup (Will be skipped if step 2 fails)
+          ansible.builtin.debug:
+            msg: "Migration completed successfully!"
+
+      rescue:
+        - name: ⚠️ RESCUE: Handle Error & Trigger Rollback
+          ansible.builtin.debug:
+            msg: "CRITICAL: Database migration task failed! Triggering automatic rollback procedure..."
+
+        - name: ⚠️ RESCUE: Restore Database from Previous Backup
+          ansible.builtin.command:
+            cmd: echo "Restoring DB state from /var/backups/latest_db.sql..."
+
+        - name: ⚠️ RESCUE: Send Alert to DevOps Notification Channel
+          ansible.builtin.debug:
+            msg: "Alert sent to Slack/PagerDuty: Migration Rollback Executed on {{ inventory_hostname }}"
+
+      always:
+        - name: 🧹 ALWAYS: Clean up temporary lock and cache files (Runs regardless of success/failure)
+          ansible.builtin.file:
+            path: /tmp/db_migration.lock
+            state: absent
+
+        - name: 🧹 ALWAYS: Log execution status message
+          ansible.builtin.debug:
+            msg: "Execution finished for host {{ inventory_hostname }}. Cleanup complete."

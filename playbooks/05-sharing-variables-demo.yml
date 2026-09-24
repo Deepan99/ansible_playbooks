@@ -1,0 +1,28 @@
+---
+# Playbook 1: Using vars_files & set_fact (Pass variable to next play via dummy host)
+- name: Playbook 1 - Generate Dynamic Variable
+  hosts: localhost
+  vars_files:
+    - vars/shared_variables.yml
+
+  tasks:
+    - name: Access shared variable from file
+      ansible.builtin.debug:
+        msg: "Shared Domain is {{ shared_domain }}"
+
+    - name: Generate dynamic token in Playbook 1
+      ansible.builtin.set_fact:
+        generated_token: "SECRET_TOKEN_9988"
+        cacheable: yes
+
+    - name: Store fact in global dummy host (dummy_var_holder)
+      ansible.builtin.add_host:
+        name: "dummy_var_holder"
+        shared_dynamic_token: "SECRET_TOKEN_9988"
+
+- name: Playbook 1 - Second Play accessing variable from dummy host
+  hosts: webservers
+  tasks:
+    - name: Read variable created in previous play/playbook
+      ansible.builtin.debug:
+        msg: "Token retrieved from Play 1 is {{ hostvars['dummy_var_holder']['shared_dynamic_token'] }}"

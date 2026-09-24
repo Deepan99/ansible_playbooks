@@ -1,0 +1,4 @@
+---
+defaults:
+  http_port: 8080
+  nginx_worker_processes: auto
