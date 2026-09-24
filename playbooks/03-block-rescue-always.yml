@@ -11,10 +11,12 @@
         - name: 1. Attempt to connect to Database Service
           ansible.builtin.command:
             cmd: echo "Attempting DB Migration..."
+          changed_when: false
 
         - name: 2. Intentional Failure Simulation (Simulates broken migration script)
           ansible.builtin.command:
             cmd: ls /non_existent_directory_trigger_error
+          changed_when: false
 
         - name: 3. Post-migration cleanup (Will be skipped if step 2 fails)
           ansible.builtin.debug:
@@ -28,6 +30,7 @@
         - name: "⚠️ RESCUE: Restore Database from Previous Backup"
           ansible.builtin.command:
             cmd: echo "Restoring DB state from /var/backups/latest_db.sql..."
+          changed_when: false
 
         - name: "⚠️ RESCUE: Send Alert to DevOps Notification Channel"
           ansible.builtin.debug:
