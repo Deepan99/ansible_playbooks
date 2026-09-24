@@ -39,4 +39,6 @@ jobs:
         
       - name: Run Molecule tests for common role
         working-directory: ./roles/common
+        env:
+          ANSIBLE_ROLES_PATH: ../../
         run: molecule test
