@@ -21,24 +21,24 @@
             msg: "Migration completed successfully!"
 
       rescue:
-        - name: ⚠️ RESCUE: Handle Error & Trigger Rollback
+        - name: "⚠️ RESCUE: Handle Error & Trigger Rollback"
           ansible.builtin.debug:
             msg: "CRITICAL: Database migration task failed! Triggering automatic rollback procedure..."
 
-        - name: ⚠️ RESCUE: Restore Database from Previous Backup
+        - name: "⚠️ RESCUE: Restore Database from Previous Backup"
           ansible.builtin.command:
             cmd: echo "Restoring DB state from /var/backups/latest_db.sql..."
 
-        - name: ⚠️ RESCUE: Send Alert to DevOps Notification Channel
+        - name: "⚠️ RESCUE: Send Alert to DevOps Notification Channel"
           ansible.builtin.debug:
             msg: "Alert sent to Slack/PagerDuty: Migration Rollback Executed on {{ inventory_hostname }}"
 
       always:
-        - name: 🧹 ALWAYS: Clean up temporary lock and cache files (Runs regardless of success/failure)
+        - name: "🧹 ALWAYS: Clean up temporary lock and cache files (Runs regardless of success/failure)"
           ansible.builtin.file:
             path: /tmp/db_migration.lock
             state: absent
 
-        - name: 🧹 ALWAYS: Log execution status message
+        - name: "🧹 ALWAYS: Log execution status message"
           ansible.builtin.debug:
             msg: "Execution finished for host {{ inventory_hostname }}. Cleanup complete."

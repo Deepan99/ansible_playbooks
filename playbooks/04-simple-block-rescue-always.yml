@@ -8,18 +8,18 @@
   tasks:
     - name: Web Server Package Installation
       block:
-        - name: Primary Option: Try installing Nginx
+        - name: "Primary Option: Try installing Nginx"
           ansible.builtin.apt:
             name: nginx
             state: present
 
       rescue:
-        - name: Fallback Option: If Nginx fails, install Apache instead
+        - name: "Fallback Option: If Nginx fails, install Apache instead"
           ansible.builtin.apt:
             name: apache2
             state: present
 
       always:
-        - name: Mandatory Cleanup: Update package manager cache
+        - name: "Mandatory Cleanup: Update package manager cache"
           ansible.builtin.apt:
             update_cache: true

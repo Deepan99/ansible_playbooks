@@ -32,7 +32,7 @@
 
     - name: "[1/5] Get the AWX in-cluster postgres pod name"
       ansible.builtin.shell: >
-        kubectl get pods -n {{ awx_namespace }}
+        set -o pipefail && kubectl get pods -n {{ awx_namespace }}
         -l app.kubernetes.io/component=database
         --field-selector=status.phase=Running
         -o jsonpath='{.items[0].metadata.name}'
@@ -258,7 +258,7 @@
 
     - name: "[5/6] Confirm in-cluster postgres pod is gone"
       ansible.builtin.shell: >
-        kubectl get pods -n {{ awx_namespace }}
+        set -o pipefail && kubectl get pods -n {{ awx_namespace }}
         -l app.kubernetes.io/component=database
         --no-headers 2>/dev/null | wc -l
       register: postgres_pod_count

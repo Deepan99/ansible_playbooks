@@ -13,7 +13,7 @@
     - name: Generate dynamic token in Playbook 1
       ansible.builtin.set_fact:
         generated_token: "SECRET_TOKEN_9988"
-        cacheable: yes
+        cacheable: true
 
     - name: Store fact in global dummy host (dummy_var_holder)
       ansible.builtin.add_host:
