@@ -2,18 +2,44 @@
 # =============================================================================
 # Playbook: Verify nmon Performance Monitoring Tool
 #
-# Supports:
-#   - Single host / group of hosts
-#   - Dynamic target_host / target_ip passed from ServiceNow or AWX
-#   - Cross-domain servers (FQDN or direct IP override)
-#   - Multi-distro Linux (RHEL, Ubuntu, Debian, SUSE, Rocky, Alma)
+# Production Features:
+#   - Dynamic Inventory: Target host injected dynamically from ServiceNow Catalog
+#   - Zero static inventories required in AWX
+#   - 100% decoupled from ServiceNow API (Pure infrastructure inspection)
+#   - Dual-mode running status (systemd service + background daemon)
+#   - Exposes nmon_installed, nmon_version, nmon_running, nmon_report via set_stats
+#
+# Usage:
+#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_server=node1"
+#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_host=node1"
 # =============================================================================
 
-- name: Verify nmon Performance Monitoring Tool Installation
-  hosts: "{{ target_host | default('all') }}"
-  gather_facts: true
+# -----------------------------------------------------------------------------
+# Play 1: Dynamically register target server from ServiceNow Service Catalog
+# -----------------------------------------------------------------------------
+- name: 1. Dynamically Register ServiceNow Target Host
+  hosts: localhost
+  gather_facts: false
   vars:
-    # Strict connection timeout to avoid hanging on firewall drops
-    ansible_ssh_timeout: 15
+    resolved_target: "{{ target_server | default(target_host | default('')) }}"
+  tasks:
+    - name: 1.1 Validate target server parameter
+      ansible.builtin.assert:
+        that:
+          - resolved_target | length > 0
+        fail_msg: "Mandatory parameter 'target_server' (or 'target_host') was not provided by ServiceNow."
+
+    - name: 1.2 Add target server to dynamic in-memory execution inventory
+      ansible.builtin.add_host:
+        name: "{{ resolved_target }}"
+        groups: dynamic_targets
+        ansible_ssh_timeout: 15
+
+# -----------------------------------------------------------------------------
+# Play 2: Audit target server using modular nmon_check role
+# -----------------------------------------------------------------------------
+- name: 2. Audit nmon Installation, Version, and Running Status
+  hosts: dynamic_targets
+  gather_facts: false
   roles:
     - role: nmon_check

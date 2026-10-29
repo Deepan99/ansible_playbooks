@@ -1,3 +1,4 @@
 ---
 # Default variables for nmon_check role
+nmon_binary_path: /usr/bin/nmon
 nmon_package_name: nmon

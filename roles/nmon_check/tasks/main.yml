@@ -1,55 +1,78 @@
 ---
 # =============================================================================
-# Role: nmon_check - Pure Enterprise Audit & Reporting
-# Purpose: Inspects target host across any Linux OS and records status cleanly
+# Role: nmon_check - Enterprise Audit & Reporting
+# Purpose: Inspects installation, version, and running status (systemd/process)
+# Output: Returns structured facts and set_stats for ServiceNow
 # =============================================================================
 
-- name: 1. Inspect standard binary paths for nmon executable
+# -----------------------------------------------------------------------------
+# 1. Installation Status Check
+# -----------------------------------------------------------------------------
+- name: 1.1 Inspect filesystem for nmon binary
   ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - /usr/bin/nmon
-    - /usr/local/bin/nmon
-    - /bin/nmon
-    - /usr/sbin/nmon
-    - /opt/nmon/bin/nmon
-  register: nmon_binary_stat
+    path: "{{ nmon_binary_path }}"
+  register: nmon_stat
+
+- name: 1.2 Set installation flag
+  ansible.builtin.set_fact:
+    nmon_installed: "{{ nmon_stat.stat.exists | default(false) }}"
+
+# -----------------------------------------------------------------------------
+# 2. Version Detection (Executed if installed)
+# -----------------------------------------------------------------------------
+- name: 2.1 Query nmon version string
+  ansible.builtin.command: "{{ nmon_binary_path }} -V"
+  register: nmon_version_cmd
   changed_when: false
+  failed_when: false
+  when: nmon_installed | bool
 
-- name: 2. Evaluate binary existence across inspected paths
+- name: 2.2 Parse version fact
   ansible.builtin.set_fact:
-    nmon_binary_found: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | list | length) > 0 }}"
-    nmon_binary_path: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | first) | default('') }}"
+    nmon_version: "{{ (nmon_version_cmd.stdout_lines | first | default('Unknown')) if nmon_installed else 'Not Installed' }}"
 
-- name: 3. Query OS package inventory natively (RHEL, Ubuntu, Debian, SUSE)
-  ansible.builtin.package_facts:
-    manager: auto
-  register: pkg_facts_result
-  ignore_errors: true
+# -----------------------------------------------------------------------------
+# 3. Running Status Check (Dual-mode: systemd service + background process)
+# -----------------------------------------------------------------------------
+- name: 3.1 Collect systemd service facts
+  ansible.builtin.service_facts:
 
-- name: 4. Determine if nmon package is registered in OS inventory
+- name: 3.2 Check background process table for nmon
+  ansible.builtin.command: pgrep -x nmon
+  register: nmon_proc_cmd
+  changed_when: false
+  failed_when: false
+
+- name: 3.3 Consolidate running state
   ansible.builtin.set_fact:
-    nmon_package_found: "{{ 'nmon' in ansible_facts.packages }}"
-  when: ansible_facts.packages is defined
+    nmon_running: >-
+      {{ (ansible_facts.services['nmon.service']['state'] == 'running')
+         if ('nmon.service' in ansible_facts.services)
+         else (nmon_proc_cmd.rc == 0) }}
+    nmon_running_mode: >-
+      {{ 'systemd service'
+         if ('nmon.service' in ansible_facts.services and ansible_facts.services['nmon.service']['state'] == 'running')
+         else ('background process' if nmon_proc_cmd.rc == 0 else 'inactive') }}
 
-- name: 5. Default package status if package_facts manager failed
+# -----------------------------------------------------------------------------
+# 4. Construct Audit Summary & Expose via set_stats
+# -----------------------------------------------------------------------------
+- name: 4.1 Construct verification summary
   ansible.builtin.set_fact:
-    nmon_package_found: false
-  when: ansible_facts.packages is not defined
+    nmon_report: >-
+      Target: {{ inventory_hostname }} |
+      Installed: {{ 'YES' if nmon_installed else 'NO' }} |
+      Version: {{ nmon_version }} |
+      Running Status: {{ 'ACTIVE (' + nmon_running_mode + ')' if nmon_running else 'INACTIVE' }}
 
-- name: 6. Consolidate installation status into verified fact
-  ansible.builtin.set_fact:
-    nmon_is_installed: "{{ nmon_binary_found | bool or nmon_package_found | bool }}"
-
-- name: 7. Construct human-readable verification report
-  ansible.builtin.set_fact:
-    nmon_verification_summary: >-
-      Host: {{ inventory_hostname }} |
-      OS: {{ ansible_facts['distribution'] | default('Linux') }} {{ ansible_facts['distribution_version'] | default('') }} |
-      Domain: {{ ansible_facts['domain'] | default('default') }} |
-      Status: {{ 'INSTALLED' if nmon_is_installed else 'NOT INSTALLED' }} |
-      Binary: {{ nmon_binary_path | default('None') }}
-
-- name: 8. Log verification summary report
+- name: 4.2 Display verification report
   ansible.builtin.debug:
-    msg: "{{ nmon_verification_summary }}"
+    msg: "{{ nmon_report }}"
+
+- name: 4.3 Expose structured facts to AWX & ServiceNow Flow
+  ansible.builtin.set_stats:
+    data:
+      nmon_installed: "{{ nmon_installed }}"
+      nmon_version: "{{ nmon_version }}"
+      nmon_running: "{{ nmon_running }}"
+      nmon_report: "{{ nmon_report }}"
