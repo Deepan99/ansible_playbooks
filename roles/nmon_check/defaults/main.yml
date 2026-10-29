@@ -1,4 +1,3 @@
 ---
 # Default variables for nmon_check role
 nmon_package_name: nmon
-nmon_fail_if_missing: true

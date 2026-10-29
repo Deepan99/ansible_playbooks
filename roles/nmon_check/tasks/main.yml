@@ -1,92 +1,55 @@
 ---
 # =============================================================================
-# Role: nmon_check - Enterprise Resilient Verification
-# Handles: Multi-OS (RHEL/Ubuntu/Debian/SUSE), command failures, cross-domain
+# Role: nmon_check - Pure Enterprise Audit & Reporting
+# Purpose: Inspects target host across any Linux OS and records status cleanly
 # =============================================================================
 
-- name: Enterprise nmon Verification Block
-  block:
-    # -------------------------------------------------------------------------
-    # 1. Inspect filesystem paths for nmon binary (eliminates dependency on 'which')
-    # -------------------------------------------------------------------------
-    - name: 1.1 Check standard binary paths for nmon executable
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop:
-        - /usr/bin/nmon
-        - /usr/local/bin/nmon
-        - /bin/nmon
-        - /usr/sbin/nmon
-        - /opt/nmon/bin/nmon
-      register: nmon_binary_stat
-      changed_when: false
+- name: 1. Inspect standard binary paths for nmon executable
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/nmon
+    - /usr/local/bin/nmon
+    - /bin/nmon
+    - /usr/sbin/nmon
+    - /opt/nmon/bin/nmon
+  register: nmon_binary_stat
+  changed_when: false
 
-    - name: 1.2 Evaluate binary existence across inspected paths
-      ansible.builtin.set_fact:
-        nmon_binary_found: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | list | length) > 0 }}"
-        nmon_binary_path: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | first) | default('') }}"
+- name: 2. Evaluate binary existence across inspected paths
+  ansible.builtin.set_fact:
+    nmon_binary_found: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | list | length) > 0 }}"
+    nmon_binary_path: "{{ (nmon_binary_stat.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', true) | map(attribute='item') | first) | default('') }}"
 
-    # -------------------------------------------------------------------------
-    # 2. Query OS package manager natively (Supports RHEL, Rocky, Ubuntu, Debian, SUSE)
-    # -------------------------------------------------------------------------
-    - name: 2.1 Gather package facts natively across any Linux distribution
-      ansible.builtin.package_facts:
-        manager: auto
-      register: pkg_facts_result
-      ignore_errors: true
+- name: 3. Query OS package inventory natively (RHEL, Ubuntu, Debian, SUSE)
+  ansible.builtin.package_facts:
+    manager: auto
+  register: pkg_facts_result
+  ignore_errors: true
 
-    - name: 2.2 Determine if nmon package is registered in OS inventory
-      ansible.builtin.set_fact:
-        nmon_package_found: "{{ 'nmon' in ansible_facts.packages }}"
-      when: ansible_facts.packages is defined
+- name: 4. Determine if nmon package is registered in OS inventory
+  ansible.builtin.set_fact:
+    nmon_package_found: "{{ 'nmon' in ansible_facts.packages }}"
+  when: ansible_facts.packages is defined
 
-    - name: 2.3 Default package status if package_facts manager failed
-      ansible.builtin.set_fact:
-        nmon_package_found: false
-      when: ansible_facts.packages is not defined
+- name: 5. Default package status if package_facts manager failed
+  ansible.builtin.set_fact:
+    nmon_package_found: false
+  when: ansible_facts.packages is not defined
 
-    # -------------------------------------------------------------------------
-    # 3. Consolidate results across binary and package checks
-    # -------------------------------------------------------------------------
-    - name: 3.1 Consolidate multi-detection installation status
-      ansible.builtin.set_fact:
-        nmon_is_installed: "{{ nmon_binary_found | bool or nmon_package_found | bool }}"
+- name: 6. Consolidate installation status into verified fact
+  ansible.builtin.set_fact:
+    nmon_is_installed: "{{ nmon_binary_found | bool or nmon_package_found | bool }}"
 
-    - name: 3.2 Log detailed host, OS, and domain diagnostic info
-      ansible.builtin.debug:
-        msg:
-          host: "{{ inventory_hostname }}"
-          domain: "{{ ansible_facts['domain'] | default(inventory_hostname.split('.', 1)[1] | default('local')) }}"
-          os_distribution: "{{ ansible_facts['distribution'] | default('Unknown') }} {{ ansible_facts['distribution_version'] | default('') }}"
-          os_family: "{{ ansible_facts['os_family'] | default('Unknown') }}"
-          nmon_installed: "{{ nmon_is_installed }}"
-          binary_path: "{{ nmon_binary_path | default('Not found') }}"
-          package_detected: "{{ nmon_package_found }}"
+- name: 7. Construct human-readable verification report
+  ansible.builtin.set_fact:
+    nmon_verification_summary: >-
+      Host: {{ inventory_hostname }} |
+      OS: {{ ansible_facts['distribution'] | default('Linux') }} {{ ansible_facts['distribution_version'] | default('') }} |
+      Domain: {{ ansible_facts['domain'] | default('default') }} |
+      Status: {{ 'INSTALLED' if nmon_is_installed else 'NOT INSTALLED' }} |
+      Binary: {{ nmon_binary_path | default('None') }}
 
-    # -------------------------------------------------------------------------
-    # 4. Enforce enterprise assertion
-    # -------------------------------------------------------------------------
-    - name: 4.1 Enforce installation assertion
-      ansible.builtin.assert:
-        that:
-          - nmon_is_installed | bool
-        fail_msg: "VERIFICATION FAILED: nmon is NOT installed on {{ inventory_hostname }} (OS: {{ ansible_facts['distribution'] | default('Linux') }}, Domain: {{ ansible_facts['domain'] | default('default') }})."
-        success_msg: "VERIFICATION SUCCESS: nmon is installed and operational on {{ inventory_hostname }} (Binary: {{ nmon_binary_path }})."
-      when: nmon_fail_if_missing | default(true) | bool
-
-  # ---------------------------------------------------------------------------
-  # Rescue block: Handles command failures, SSH/network drops, or timeout errors
-  # ---------------------------------------------------------------------------
-  rescue:
-    - name: Capture diagnostic failure information
-      ansible.builtin.set_fact:
-        nmon_is_installed: false
-        verification_error: "{{ ansible_failed_result.msg | default('Unknown error during nmon verification') }}"
-
-    - name: Display diagnostic error summary
-      ansible.builtin.debug:
-        msg: "CRITICAL FAILURE on host '{{ inventory_hostname }}': {{ verification_error }}"
-
-    - name: Fail task cleanly with explicit enterprise error
-      ansible.builtin.fail:
-        msg: "Host '{{ inventory_hostname }}' verification failed: {{ verification_error }}"
+- name: 8. Log verification summary report
+  ansible.builtin.debug:
+    msg: "{{ nmon_verification_summary }}"
