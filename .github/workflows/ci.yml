@@ -8,37 +8,44 @@ on:
 
 jobs:
   ansible-lint:
+    name: Ansible Lint & Syntax Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-          
-      - name: Install dependencies
+
+      - name: Install Python Dependencies
         run: pip install ansible ansible-lint
-        
-      - name: Run ansible-lint
+
+      - name: Install Ansible Galaxy Collections
+        run: ansible-galaxy collection install -r collections/requirements.yml
+
+      - name: Run Ansible Lint
         run: ansible-lint playbooks/ roles/
 
   molecule-tests:
+    name: Molecule Role Testing
     needs: ansible-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-          
-      - name: Install dependencies
+
+      - name: Install Molecule Dependencies
         run: pip install ansible molecule molecule-plugins[docker] docker
-        
+
       - name: Run Molecule tests for common role
         working-directory: ./roles/common
         env:

@@ -1,0 +1,56 @@
+# =============================================================================
+# Enterprise Ansible .gitignore
+# =============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments & virtualenvs
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Ansible execution artifacts
+*.retry
+.cache/
+.ansible/
+facts_cache/
+/tmp/ansible_fact_cache/
+
+# Ansible Vault credentials & unencrypted cleartext passwords
+.vault_pass*
+*.vault_pass
+vault_password*
+*.key
+*.pem
+*.pfx
+
+# Molecule & Testing artifacts
+.molecule/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Backup & swap files
+*.bak
+*.swp
+*.swo
+*~
+*.tmp
+
+# Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

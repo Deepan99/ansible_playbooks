@@ -1,0 +1,32 @@
+---
+# =============================================================================
+# Enterprise Ansible-Lint Configuration
+# Reference: https://ansible.readthedocs.io/projects/lint/
+# =============================================================================
+
+profile: production
+
+# Directories or patterns to ignore during linting
+exclude_paths:
+  - .github/
+  - tools/
+  - roles/common/molecule/
+  - vars/vault.yml
+
+# Parse extra vars files if necessary
+extra_vars: {}
+
+# Rules configuration
+rules:
+  line-length:
+    max: 160
+  name[play]:
+    severity: medium
+  name[prefix]:
+    severity: medium
+  no-changed-when:
+    severity: medium
+  yaml:
+    rules:
+      line-length:
+        max: 160

@@ -1,86 +1,186 @@
-# Ansible Deep Learning Guide & Exercises
+# Enterprise Ansible Automation Platform
 
-Welcome to your hands-on **Ansible Deep Learning Workspace**!
+[![Ansible CI](https://github.com/Deepan99/ansible_playbooks/actions/workflows/ci.yml/badge.svg)](https://github.com/Deepan99/ansible_playbooks/actions/workflows/ci.yml)
+[![Ansible Core](https://img.shields.io/badge/Ansible-2.15%2B-red.svg)](https://docs.ansible.com/)
+[![Ansible-Lint](https://img.shields.io/badge/Ansible--Lint-passing-green.svg)](https://ansible.readthedocs.io/projects/lint/)
 
-## 📂 Project Structure Overview
+Production-grade Ansible automation repository structured according to Red Hat Ansible Automation Platform (AAP) and AWX enterprise standards.
 
-```
-e:/Deepan/Linux/ansible/
-├── index.html                  # Interactive Lab Dashboard UI
-├── style.css                   # Modern dark-mode styling system
-├── app.js                      # Playbook simulator & Inventory builder logic
-├── ansible.cfg                 # Production-grade Ansible configuration file
-├── inventories/
-│   └── production/
-│       └── hosts.ini           # Real-world INI static inventory with host/group vars
-├── playbooks/
-│   ├── 01-basic-setup.yml      # Base system packages & hardening playbook
-│   ├── 02-nginx-webserver.yml  # Nginx deployment & handlers playbook
-│   └── templates/
-│       └── index.html.j2       # Jinja2 dynamic web page template
-└── roles/
-    └── common/                 # Standard Ansible Role structure
-        ├── defaults/main.yml
-        └── tasks/main.yml
+---
+
+## 📁 Repository Structure
+
+```text
+├── .github/workflows/ci.yml     # Automated CI pipeline: ansible-lint & molecule tests
+├── .ansible-lint                # Production linting configuration profile
+├── .gitignore                   # Enterprise git exclusion rules
+├── ansible.cfg                  # Core configuration (defaults, forks, pipelining)
+├── collections/
+│   └── requirements.yml         # Required Galaxy collections (Azure, AWS, POSIX, VMware)
+│
+├── inventories/                 # Multi-tier inventories
+│   ├── dev/hosts.yml            # Local development & mock hosts
+│   ├── stage/hosts.yml          # Staging validation environment
+│   └── prod/hosts.ini           # Production lab infrastructure
+│
+├── group_vars/                  # Shared & group variables
+│   ├── all/                     # Global variables applied to all nodes
+│   │   ├── main.yml             # Global shared ports and defaults
+│   │   └── vm_vars.yml          # Virtual machine provisioning defaults
+│   ├── infra.yml                # AWX PostgreSQL database group variables
+│   └── k8s_master.yml           # Kubernetes control plane variables
+│
+├── playbooks/                   # Domain-separated playbooks
+│   ├── patching/                # Enterprise OS and kernel patching
+│   │   ├── azure_kernel_patching.yml
+│   │   ├── patch_rhel9_standard.yml
+│   │   ├── patch_rhel9_security.yml
+│   │   ├── patch_rhel9_conditional.yml
+│   │   ├── patch_solaris11_standard.yml
+│   │   ├── patch_solaris11_security.yml
+│   │   ├── patch_solaris11_conditional.yml
+│   │   └── security_patching.yml
+│   ├── provisioning/            # Infrastructure & database provisioning
+│   │   ├── provision_aws_ec2.yml
+│   │   ├── provision_azure_vm.yml
+│   │   ├── provision_vmware_vm.yml
+│   │   ├── provision_postgres.yml
+│   │   └── migrate_awx_to_external_db.yml
+│   ├── operations/              # Day-2 operations & systems maintenance
+│   │   ├── health_check.yml
+│   │   ├── maintenance_checks.yml
+│   │   ├── manage_users.yml
+│   │   ├── manage_services.yml
+│   │   ├── manage_storage.yml
+│   │   ├── change_password.yml
+│   │   ├── reboot_nodes.yml
+│   │   ├── rollback_recovery.yml
+│   │   ├── ping_spoke_vms.yml
+│   │   ├── software_upgrades.yml
+│   │   ├── repository_changes.yml
+│   │   └── app_prerequisites.yml
+│   ├── security/                # Hardening & compliance
+│   │   ├── secure_ssh_sudo.yml
+│   │   └── deploy_qualys_podman.yml
+│   └── learning/                # Educational demos & exercises
+│       ├── 01-basic-setup.yml
+│       ├── 02-nginx-webserver.yml
+│       ├── 03-block-rescue-always.yml
+│       ├── 04-simple-block-rescue-always.yml
+│       ├── 05-sharing-variables-demo.yml
+│       └── hello_world.yml
+│
+├── roles/                       # Modular reusable roles
+│   └── common/                  # Base OS configuration role with Molecule tests
+│
+├── vars/                        # Central variable & vault files
+│   ├── shared_variables.yml
+│   └── vault.yml                # Ansible Vault encrypted credentials
+│
+├── docs/                        # Architecture & security guidelines
+│   ├── architecture.md          # AAP/AWX integration & design architecture
+│   └── rbac_guide.md            # Role-Based Access Control guide
+│
+└── tools/                       # Utilities & simulators
+    ├── lab-dashboard/           # Interactive browser-based training lab UI
+    └── simulator-app/           # Target FastAPI service for deployment demos
 ```
 
 ---
 
-## 🚀 Interactive Practice Lab Dashboard
+## 🚀 Getting Started
 
-You can open `index.html` directly in your browser or serve it locally to experience:
-1. **Architecture & Agentless Concepts**: Visual SSH execution workflow & target topologies.
-2. **Visual Inventory & Group Variables Builder**: Toggle between INI & YAML format and inspect parent/child group structures.
-3. **Playbook Simulator**: Interactively run playbooks against mock nodes (`web-node-01`, `db-node-01`), watch task outputs (`ok`, `changed`), and observe **idempotency** when running playbooks a second time!
-4. **Core Modules Explorer**: Interactive search for top Ansible modules (`template`, `service`, `apt`, `git`, `user`, `cron`).
-5. **Ansible Vault Encrypter**: Test $ANSIBLE_VAULT encryption & secrets management.
+### 1. Prerequisites & Collection Dependencies
 
----
-
-## 📖 Key Concepts Summary Cheat Sheet
-
-### 1. Agentless Architecture
-- Ansible requires **no agent** on target nodes.
-- Connects over standard **SSH** (Linux/Unix, default port 22) or **WinRM/PSRP** (Windows, default port 5986).
-- Executes Python scripts (modules) in remote memory (`/tmp/ansible-tmp-...`) and cleans up afterward.
-
-### 2. Idempotency
-- Running an Ansible playbook multiple times leaves the system in the **exact same target state**.
-- If a package/user/file is already at the target state, Ansible marks the task as `ok` (0 changes made).
-
-### 3. Variable Precedence Ladder (Highest to Lowest)
-1. Extra vars (`ansible-playbook -e "var=value"`) - **HIGHEST**
-2. Task vars
-3. Block vars
-4. Role and include vars
-5. Registered vars / `set_fact`
-6. Play vars / `vars_files`
-7. Host facts (`ansible_facts`)
-8. `host_vars/` directory files
-9. `group_vars/` directory files
-10. Role defaults (`roles/<name>/defaults/main.yml`) - **LOWEST**
-
-### 4. Essential CLI Commands
+Install the required Ansible Galaxy collections:
 
 ```bash
-# Test connectivity to all inventory hosts
-ansible all -i inventories/production/hosts.ini -m ping
-
-# Run fact gathering on a specific host group
-ansible webservers -i inventories/production/hosts.ini -m setup
-
-# Syntax check a playbook
-ansible-playbook -i inventories/production/hosts.ini playbooks/02-nginx-webserver.yml --syntax-check
-
-# Dry-run execution (Check mode)
-ansible-playbook -i inventories/production/hosts.ini playbooks/02-nginx-webserver.yml --check --diff
-
-# Execute playbook
-ansible-playbook -i inventories/production/hosts.ini playbooks/02-nginx-webserver.yml
-
-# Encrypt a secret file with Ansible Vault
-ansible-vault encrypt group_vars/all/vault.yml
-
-# Run playbook with encrypted vault secrets
-ansible-playbook site.yml --ask-vault-pass
+ansible-galaxy collection install -r collections/requirements.yml
 ```
+
+### 2. Environment Configuration
+
+The repository is configured via `ansible.cfg` with optimal enterprise defaults:
+- Inventory defaults to `inventories/prod/hosts.ini`
+- SSH Pipelining and multiplexing enabled for low-latency execution
+- JSON fact caching enabled in `/tmp/ansible_fact_cache`
+- Privilege escalation set to `sudo`
+
+### 3. Syntax Verification
+
+Before executing any playbooks or opening pull requests:
+
+```bash
+# Verify playbook syntax
+ansible-playbook --syntax-check playbooks/operations/health_check.yml
+
+# Run ansible-lint
+ansible-lint playbooks/ roles/
+```
+
+---
+
+## 📋 Common Playbook Execution Examples
+
+### Systems Health & Operations
+```bash
+# Run pre/post maintenance health checks
+ansible-playbook playbooks/operations/health_check.yml
+
+# Perform node reboot with connection polling
+ansible-playbook playbooks/operations/reboot_nodes.yml
+```
+
+### Enterprise Patching
+```bash
+# Standard RHEL 9 system patching (with pre-checks & post-reboot verification)
+ansible-playbook playbooks/patching/patch_rhel9_standard.yml
+
+# Security-only RHEL 9 patching
+ansible-playbook playbooks/patching/patch_rhel9_security.yml
+
+# Azure ARM REST API kernel patching & audit
+ansible-playbook playbooks/patching/azure_kernel_patching.yml
+```
+
+### Cloud & Database Provisioning
+```bash
+# Provision PostgreSQL 15 for AWX external database
+ansible-playbook playbooks/provisioning/provision_postgres.yml --ask-vault-pass
+
+# Provision an AWS EC2 instance
+ansible-playbook playbooks/provisioning/provision_aws_ec2.yml
+```
+
+---
+
+## 🔒 Secrets Management
+
+Sensitive credentials (such as database passwords and API tokens) are encrypted with **Ansible Vault** inside `vars/vault.yml`.
+
+To edit the vault file:
+```bash
+ansible-vault edit vars/vault.yml
+```
+
+To run playbooks requiring vault credentials:
+```bash
+ansible-playbook playbooks/<path-to-playbook>.yml --ask-vault-pass
+# Or using a vault password file:
+ansible-playbook playbooks/<path-to-playbook>.yml --vault-password-file ~/.vault_pass
+```
+
+---
+
+## 🧪 CI/CD & Molecule Testing
+
+Every push and pull request to `main` triggers automated GitHub Actions workflows:
+- **`ansible-lint`**: Ensures compliance with Ansible best practices and YAML formatting.
+- **`molecule test`**: Spin up containerized instances and executes test suites against the `roles/common` role.
+
+---
+
+## 📚 Additional Documentation
+- [Architecture & AWX Integration Guide](docs/architecture.md)
+- [Ansible RBAC Guide](docs/rbac_guide.md)
+- Interactive Lab Dashboard: Open `tools/lab-dashboard/index.html` in any modern web browser.
