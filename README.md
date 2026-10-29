@@ -50,6 +50,7 @@ Production-grade Ansible automation repository structured according to Red Hat A
 │   │   ├── provision_postgres.yml
 │   │   └── migrate_awx_to_external_db.yml
 │   ├── operations/              # Day-2 operations & systems maintenance
+│   │   ├── check_nmon.yml
 │   │   ├── health_check.yml
 │   │   ├── maintenance_checks.yml
 │   │   ├── manage_users.yml
@@ -74,7 +75,8 @@ Production-grade Ansible automation repository structured according to Red Hat A
 │       └── hello_world.yml
 │
 ├── roles/                       # Modular reusable roles
-│   └── common/                  # Base OS configuration role with Molecule tests
+│   ├── common/                  # Base OS configuration role with Molecule tests
+│   └── nmon_check/              # Performance monitoring tool (nmon) validation role
 │
 ├── vars/                        # Central variable & vault files
 │   ├── shared_variables.yml

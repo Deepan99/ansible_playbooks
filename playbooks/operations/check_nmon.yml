@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# Playbook: Verify nmon Performance Monitoring Tool
+#
+# Supports:
+#   - Single host / group of hosts
+#   - Dynamic target_host / target_ip passed from ServiceNow or AWX
+#   - Cross-domain servers (FQDN or direct IP override)
+#   - Multi-distro Linux (RHEL, Ubuntu, Debian, SUSE, Rocky, Alma)
+# =============================================================================
+
+- name: Verify nmon Performance Monitoring Tool Installation
+  hosts: "{{ target_host | default('all') }}"
+  gather_facts: true
+  vars:
+    # Allows cross-domain IP override if DNS doesn't resolve across domains
+    ansible_host: "{{ target_ip | default(omit) }}"
+    # Strict connection timeout to avoid hanging on cross-domain firewalls
+    ansible_ssh_timeout: 15
+  roles:
+    - role: nmon_check
