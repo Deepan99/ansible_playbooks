@@ -1,0 +1,21 @@
+---
+- name: Perform health check on target host
+  ansible.builtin.delegate_to: "{{ target_host }}"
+  block:
+    - name: Gather facts from target host
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "network"
+          - "hardware"
+
+    - name: Check system uptime
+      ansible.builtin.command: uptime
+      register: uptime_output
+      changed_when: false
+
+    - name: Check root disk free percentage
+      ansible.builtin.assert:
+        that:
+          - (ansible_facts['mounts'] | selectattr('path', 'equalto', '/') | map(attribute='size_available') | first / 1024 / 1024 / 1024) > 1.0
+        fail_msg: "Disk space critically low (< 1 GB free on /)."

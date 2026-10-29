@@ -4,7 +4,7 @@
 [![Ansible Core](https://img.shields.io/badge/Ansible-2.15%2B-red.svg)](https://docs.ansible.com/)
 [![Ansible-Lint](https://img.shields.io/badge/Ansible--Lint-passing-green.svg)](https://ansible.readthedocs.io/projects/lint/)
 
-Production-grade Ansible automation repository structured according to Red Hat Ansible Automation Platform (AAP) and AWX enterprise standards.
+Production-grade Ansible automation repository structured according to Red Hat Ansible Automation Platform (AAP) and AWX enterprise standards, with out-of-the-box **ServiceNow Service Catalog** integration.
 
 ---
 
@@ -16,7 +16,7 @@ Production-grade Ansible automation repository structured according to Red Hat A
 ├── .gitignore                   # Enterprise git exclusion rules
 ├── ansible.cfg                  # Core configuration (defaults, forks, pipelining)
 ├── collections/
-│   └── requirements.yml         # Required Galaxy collections (Azure, AWS, POSIX, VMware)
+│   └── requirements.yml         # Galaxy collections (Azure, AWS, POSIX, VMware, ServiceNow)
 │
 ├── inventories/                 # Multi-tier inventories
 │   ├── dev/hosts.yml            # Local development & mock hosts
@@ -31,6 +31,9 @@ Production-grade Ansible automation repository structured according to Red Hat A
 │   └── k8s_master.yml           # Kubernetes control plane variables
 │
 ├── playbooks/                   # Domain-separated playbooks
+│   ├── servicenow/              # ServiceNow Service Catalog & ITSM automation
+│   │   ├── service_catalog_fulfillment.yml
+│   │   └── tasks/               # Action handlers (health check, restart, cleanup)
 │   ├── patching/                # Enterprise OS and kernel patching
 │   │   ├── azure_kernel_patching.yml
 │   │   ├── patch_rhel9_standard.yml
@@ -79,7 +82,8 @@ Production-grade Ansible automation repository structured according to Red Hat A
 │
 ├── docs/                        # Architecture & security guidelines
 │   ├── architecture.md          # AAP/AWX integration & design architecture
-│   └── rbac_guide.md            # Role-Based Access Control guide
+│   ├── rbac_guide.md            # Role-Based Access Control guide
+│   └── servicenow_integration_guide.md # Complete ServiceNow Service Catalog Setup
 │
 └── tools/                       # Utilities & simulators
     ├── lab-dashboard/           # Interactive browser-based training lab UI
@@ -120,6 +124,21 @@ ansible-lint playbooks/ roles/
 
 ---
 
+## ⚡ ServiceNow Service Catalog Integration
+
+This repository includes turnkey support for fulfilling requests from the **ServiceNow Service Catalog**:
+
+- **Playbook**: `playbooks/servicenow/service_catalog_fulfillment.yml`
+- **Execution Flow**:
+  1. End user selects an item in ServiceNow Service Portal (e.g., Restart Service, Run Health Check, Disk Cleanup).
+  2. ServiceNow **Flow Designer** posts to AWX `/api/v2/job_templates/{id}/launch/` passing the `ritm_number` and target parameters as `extra_vars`.
+  3. AWX executes the playbook on the target node.
+  4. The playbook updates the ServiceNow RITM's **Work Notes** in real time and automatically transitions the state to **Closed Complete**.
+
+📖 For detailed step-by-step setup instructions, refer to the [ServiceNow Integration Guide](docs/servicenow_integration_guide.md).
+
+---
+
 ## 📋 Common Playbook Execution Examples
 
 ### Systems Health & Operations
@@ -156,7 +175,7 @@ ansible-playbook playbooks/provisioning/provision_aws_ec2.yml
 
 ## 🔒 Secrets Management
 
-Sensitive credentials (such as database passwords and API tokens) are encrypted with **Ansible Vault** inside `vars/vault.yml`.
+Sensitive credentials (such as database passwords, ServiceNow passwords, and API tokens) are encrypted with **Ansible Vault** inside `vars/vault.yml`.
 
 To edit the vault file:
 ```bash
@@ -176,11 +195,12 @@ ansible-playbook playbooks/<path-to-playbook>.yml --vault-password-file ~/.vault
 
 Every push and pull request to `main` triggers automated GitHub Actions workflows:
 - **`ansible-lint`**: Ensures compliance with Ansible best practices and YAML formatting.
-- **`molecule test`**: Spin up containerized instances and executes test suites against the `roles/common` role.
+- **`molecule test`**: Spins up containerized instances and executes test suites against the `roles/common` role.
 
 ---
 
-## 📚 Additional Documentation
+## 📚 Documentation Catalog
 - [Architecture & AWX Integration Guide](docs/architecture.md)
+- [ServiceNow Service Catalog Integration Guide](docs/servicenow_integration_guide.md)
 - [Ansible RBAC Guide](docs/rbac_guide.md)
 - Interactive Lab Dashboard: Open `tools/lab-dashboard/index.html` in any modern web browser.

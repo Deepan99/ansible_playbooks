@@ -1,0 +1,93 @@
+---
+# =============================================================================
+# ServiceNow Service Catalog Item Fulfillment Playbook
+#
+# Intended to be triggered by ServiceNow Flow Designer / IntegrationHub
+# via AWX / AAP REST API: POST /api/v2/job_templates/{id}/launch/
+#
+# Variables expected from ServiceNow (via extra_vars):
+#   - sn_instance: "devXXXXX.service-now.com"
+#   - ritm_number: "RITM0010001"
+#   - target_host: "web01.production.internal"
+#   - action_type: "restart_service" | "health_check" | "disk_cleanup"
+#   - target_service: "nginx" (if applicable)
+# =============================================================================
+
+- name: ServiceNow Service Catalog - Automated Task Fulfillment
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sn_instance: "{{ sn_instance | default(lookup('env', 'SN_INSTANCE')) }}"
+    sn_username: "{{ sn_username | default(lookup('env', 'SN_USERNAME')) }}"
+    sn_password: "{{ sn_password | default(lookup('env', 'SN_PASSWORD')) }}"
+    ritm_number: "{{ ritm_number | default('RITM0000000') }}"
+    action_type: "{{ action_type | default('health_check') }}"
+    target_host: "{{ target_host | default('localhost') }}"
+    target_service: "{{ target_service | default('sshd') }}"
+
+  tasks:
+    - name: 1. Validate incoming ServiceNow Catalog parameters
+      ansible.builtin.assert:
+        that:
+          - sn_instance is defined
+          - sn_username is defined
+          - sn_password is defined
+          - ritm_number != 'RITM0000000'
+        fail_msg: "Required ServiceNow parameters missing. Ensure AWX Job Template receives credentials and extra_vars."
+
+    - name: 2. Update ServiceNow RITM Work Notes (Automation Started)
+      servicenow.itsm.api:
+        instance:
+          host: "{{ sn_instance }}"
+          username: "{{ sn_username }}"
+          password: "{{ sn_password }}"
+        resource: "sc_req_item"
+        action: patch
+        query_params:
+          sysparm_query: "number={{ ritm_number }}"
+        data:
+          work_notes: "[Ansible Automation] Execution started for action '{{ action_type }}' on target host '{{ target_host }}'. AWX Job ID: {{ awx_job_id | default('Manual') }}"
+      register: ritm_start_update
+      ignore_errors: true
+
+    - name: 3. Dispatch requested Catalog Action
+      block:
+        - name: 3.1. Execute action on remote target host
+          ansible.builtin.include_tasks: "tasks/{{ action_type }}.yml"
+
+        - name: 3.2. Update ServiceNow RITM (Closed Complete)
+          servicenow.itsm.api:
+            instance:
+              host: "{{ sn_instance }}"
+              username: "{{ sn_username }}"
+              password: "{{ sn_password }}"
+            resource: "sc_req_item"
+            action: patch
+            query_params:
+              sysparm_query: "number={{ ritm_number }}"
+            data:
+              state: "3"  # Closed Complete
+              stage: "complete"
+              work_notes: "[Ansible Automation] SUCCESS: Successfully completed '{{ action_type }}' on host '{{ target_host }}'."
+          ignore_errors: true
+
+      rescue:
+        - name: 3.3. Update ServiceNow RITM (Closed Incomplete on Failure)
+          servicenow.itsm.api:
+            instance:
+              host: "{{ sn_instance }}"
+              username: "{{ sn_username }}"
+              password: "{{ sn_password }}"
+            resource: "sc_req_item"
+            action: patch
+            query_params:
+              sysparm_query: "number={{ ritm_number }}"
+            data:
+              state: "4"  # Closed Incomplete
+              stage: "Request Cancelled"
+              work_notes: "[Ansible Automation] FAILURE: Execution of '{{ action_type }}' failed on '{{ target_host }}'. Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          ignore_errors: true
+
+        - name: Fail the playbook run
+          ansible.builtin.fail:
+            msg: "Action '{{ action_type }}' failed on '{{ target_host }}'. ServiceNow ticket {{ ritm_number }} marked Closed Incomplete."

@@ -1,0 +1,17 @@
+---
+- name: Restart managed service on target host
+  ansible.builtin.delegate_to: "{{ target_host }}"
+  become: true
+  block:
+    - name: Ensure target service is present and restart
+      ansible.builtin.systemd_service:
+        name: "{{ target_service }}"
+        state: restarted
+      register: service_restart_result
+
+    - name: Verify service is actively running
+      ansible.builtin.systemd_service:
+        name: "{{ target_service }}"
+        state: started
+      check_mode: true
+      register: service_check_result

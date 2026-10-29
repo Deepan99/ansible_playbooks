@@ -18,3 +18,6 @@ collections:
 
   - name: community.vmware
     version: ">=3.8.0"
+
+  - name: servicenow.itsm
+    version: ">=2.2.0"

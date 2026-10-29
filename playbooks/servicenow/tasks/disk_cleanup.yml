@@ -1,0 +1,15 @@
+---
+- name: Clean temporary files and package caches on target host
+  ansible.builtin.delegate_to: "{{ target_host }}"
+  become: true
+  block:
+    - name: Clean apt cache (Debian/Ubuntu)
+      ansible.builtin.apt:
+        autoclean: true
+        autoremove: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Clean dnf/yum cache (RHEL/CentOS)
+      ansible.builtin.command: dnf clean all
+      when: ansible_os_family == 'RedHat'
+      changed_when: true
