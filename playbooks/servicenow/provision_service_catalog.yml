@@ -1,0 +1,137 @@
+---
+# =============================================================================
+# Playbook: Automated Provisioning of ServiceNow Service Catalog as Code
+#
+# Idempotently creates:
+#   1. Catalog Item: 'Linux Server Automated Maintenance'
+#   2. Variables: 'target_host' (Reference to cmdb_ci_linux_server),
+#                 'action_type' (Select Box with choices),
+#                 'target_service' (Single Line Text)
+#
+# Usage:
+#   ansible-playbook playbooks/servicenow/provision_service_catalog.yml \
+#     -e "sn_instance=dev216753.service-now.com" \
+#     -e "sn_username=mid_deepan_user" \
+#     -e "sn_password=your_password"
+# =============================================================================
+
+- name: Provision ServiceNow Service Catalog as Code
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sn_instance: "{{ sn_instance | default(lookup('env', 'SN_INSTANCE')) }}"
+    sn_username: "{{ sn_username | default(lookup('env', 'SN_USERNAME')) }}"
+    sn_password: "{{ sn_password | default(lookup('env', 'SN_PASSWORD')) }}"
+    sn_base_url: "https://{{ sn_instance }}/api/now/table"
+    catalog_sys_id: "e0d08b13c3330100c8b837659bba8fb4"   # Service Catalog
+    category_sys_id: "109f0438c6112276003ae8ac13e7009d"  # Services
+
+  tasks:
+    - name: 1. Check if Catalog Item already exists
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/sc_cat_item?sysparm_query=name=Linux Server Automated Maintenance"
+        method: GET
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        status_code: 200
+      register: cat_item_query
+
+    - name: 2. Create Catalog Item if missing
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/sc_cat_item"
+        method: POST
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          name: "Linux Server Automated Maintenance"
+          short_description: "Self-service server automation executed via Ansible Automation Platform / AWX"
+          description: "Provides self-service automated maintenance tasks (health check, service restart, disk cleanup) dispatched via Ansible Automation Platform."
+          sc_catalogs: "{{ catalog_sys_id }}"
+          category: "{{ category_sys_id }}"
+          active: true
+        status_code: 201
+      register: cat_item_created
+      when: cat_item_query.json.result | length == 0
+
+    - name: Set Catalog Item SysID
+      ansible.builtin.set_fact:
+        cat_item_id: "{{ cat_item_created.json.result.sys_id if cat_item_query.json.result | length == 0 else cat_item_query.json.result[0].sys_id }}"
+
+    - name: 3. Ensure 'target_host' Variable exists (Reference to Linux CMDB)
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/item_option_new"
+        method: POST
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          cat_item: "{{ cat_item_id }}"
+          name: "target_host"
+          question_text: "Target Server"
+          type: 8 # Reference
+          reference: "cmdb_ci_linux_server"
+          mandatory: true
+          order: 100
+        status_code: [200, 201]
+
+    - name: 4. Ensure 'action_type' Variable exists (Select Box)
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/item_option_new"
+        method: POST
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          cat_item: "{{ cat_item_id }}"
+          name: "action_type"
+          question_text: "Select Maintenance Action"
+          type: 5 # Select Box
+          mandatory: true
+          order: 200
+        status_code: [200, 201]
+      register: action_var_created
+
+    - name: 5. Add choices for 'action_type'
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/question_choice"
+        method: POST
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          question: "{{ action_var_created.json.result.sys_id }}"
+          text: "{{ item.text }}"
+          value: "{{ item.value }}"
+          order: "{{ item.order }}"
+        status_code: [200, 201]
+      loop:
+        - { text: "System Health Check", value: "health_check", order: 10 }
+        - { text: "Restart Service", value: "restart_service", order: 20 }
+        - { text: "Disk Cleanup", value: "disk_cleanup", order: 30 }
+
+    - name: 6. Ensure 'target_service' Variable exists
+      ansible.builtin.uri:
+        url: "{{ sn_base_url }}/item_option_new"
+        method: POST
+        user: "{{ sn_username }}"
+        password: "{{ sn_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          cat_item: "{{ cat_item_id }}"
+          name: "target_service"
+          question_text: "Service Name (if restarting)"
+          type: 6 # Single Line Text
+          default_value: "sshd"
+          order: 300
+        status_code: [200, 201]
+
+    - name: Display catalog creation confirmation
+      ansible.builtin.debug:
+        msg: "Service Catalog Item 'Linux Server Automated Maintenance' successfully provisioned as code. SysId: {{ cat_item_id }}"
