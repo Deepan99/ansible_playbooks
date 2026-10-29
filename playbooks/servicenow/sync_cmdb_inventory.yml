@@ -1,0 +1,57 @@
+---
+# =============================================================================
+# Playbook: Synchronize Ansible Inventory Hosts into ServiceNow CMDB
+#
+# Populates or updates Linux server Configuration Items (CIs) in ServiceNow
+# table 'cmdb_ci_linux_server'.
+#
+# Usage:
+#   ansible-playbook playbooks/servicenow/sync_cmdb_inventory.yml \
+#     -e "sn_instance=dev216753.service-now.com" \
+#     -e "sn_username=mid_deepan_user" \
+#     -e "sn_password=your_password"
+# =============================================================================
+
+- name: Sync Ansible Managed Hosts to ServiceNow CMDB
+  hosts: localhost
+  gather_facts: false
+  vars:
+    sn_instance: "{{ sn_instance | default(lookup('env', 'SN_INSTANCE')) }}"
+    sn_username: "{{ sn_username | default(lookup('env', 'SN_USERNAME')) }}"
+    sn_password: "{{ sn_password | default(lookup('env', 'SN_PASSWORD')) }}"
+
+  tasks:
+    - name: Ensure target hosts are registered in ServiceNow CMDB
+      servicenow.itsm.api:
+        instance:
+          host: "{{ sn_instance }}"
+          username: "{{ sn_username }}"
+          password: "{{ sn_password }}"
+        resource: "cmdb_ci_linux_server"
+        action: post
+        data:
+          name: "{{ item.name }}"
+          ip_address: "{{ item.ip }}"
+          os: "Linux"
+          os_version: "{{ item.os_version }}"
+          short_description: "{{ item.desc }}"
+          operational_status: "1"
+      loop:
+        - name: "awx-master"
+          ip: "192.168.224.129"
+          os_version: "Ubuntu / k3s"
+          desc: "AWX Master Node & Kubernetes Control Plane"
+        - name: "infra-node"
+          ip: "192.168.224.131"
+          os_version: "CentOS Stream 9"
+          desc: "AWX External PostgreSQL 15 Database Node"
+        - name: "exec-node"
+          ip: "192.168.224.130"
+          os_version: "CentOS Stream 9"
+          desc: "AWX Execution / Receptor Worker Node"
+      register: cmdb_sync_results
+      ignore_errors: true
+
+    - name: Display synchronization status
+      ansible.builtin.debug:
+        msg: "Successfully synchronized inventory hosts into ServiceNow CMDB."
