@@ -13,9 +13,7 @@
   hosts: "{{ target_host | default('all') }}"
   gather_facts: true
   vars:
-    # Allows cross-domain IP override if DNS doesn't resolve across domains
-    ansible_host: "{{ target_ip | default(omit) }}"
-    # Strict connection timeout to avoid hanging on cross-domain firewalls
+    # Strict connection timeout to avoid hanging on firewall drops
     ansible_ssh_timeout: 15
   roles:
     - role: nmon_check
