@@ -1,0 +1,9 @@
+---
+# =============================================================================
+# Nmon Collection Requirements
+# For nmon monitoring and health checks
+#
+# Note: nmon_check role uses only built-in ansible.builtin modules
+# No external Galaxy collections are required
+# =============================================================================
+collections: []
