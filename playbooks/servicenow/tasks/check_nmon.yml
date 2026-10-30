@@ -1,0 +1,38 @@
+---
+# =============================================================================
+# Task: Verify nmon Performance Monitoring Tool Installation
+# Target: Target Linux host passed from ServiceNow Catalog
+# =============================================================================
+
+- name: Verify nmon monitoring tool installation on target host
+  ansible.builtin.delegate_to: "{{ target_host }}"
+  block:
+    - name: 1. Check if nmon executable binary exists in PATH
+      ansible.builtin.command: which nmon
+      register: nmon_binary_check
+      changed_when: false
+      failed_when: false
+
+    - name: 2. Check if nmon package is installed (RPM/DEB)
+      ansible.builtin.shell: |
+        if command -v rpm >/dev/null 2>&1; then
+          rpm -q nmon
+        elif command -v dpkg-query >/dev/null 2>&1; then
+          dpkg-query -W -f='${Status}' nmon 2>/dev/null | grep -q "install ok installed"
+        else
+          exit 1
+        fi
+      register: nmon_pkg_check
+      changed_when: false
+      failed_when: false
+
+    - name: 3. Evaluate verification results
+      ansible.builtin.assert:
+        that:
+          - nmon_binary_check.rc == 0 or nmon_pkg_check.rc == 0
+        fail_msg: "VERIFICATION FAILED: nmon monitoring tool is NOT installed on {{ target_host }}."
+        success_msg: "VERIFICATION SUCCESS: nmon monitoring tool is installed and available at {{ nmon_binary_check.stdout | default('system package') }}."
+
+    - name: 4. Record verification details
+      ansible.builtin.set_fact:
+        nmon_status_report: "Installed and verified on {{ target_host }}. Binary location: {{ nmon_binary_check.stdout | default('N/A') }}"
