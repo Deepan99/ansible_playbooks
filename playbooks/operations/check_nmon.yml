@@ -1,19 +1,16 @@
 ---
 # =============================================================================
-# Playbook: Verify nmon Performance Monitoring Tool (Multi-Server Enterprise)
+# Playbook: Verify nmon Performance Monitoring Tool (Zero-Credential Dynamic Group)
 #
 # Production Design:
-#   - Zero Static Inventory in AWX: AWX inventory has 0 hosts.
-#   - Runtime In-Memory Grouping: Injects multiple servers passed from ServiceNow.
-#   - Supports: Comma-separated ('node1,node2'), list, or single host.
-#   - Pure Infrastructure Logic: 100% decoupled from ServiceNow APIs.
-#
-# Usage:
-#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_server=node1,node2,master"
+#   - Zero Credentials in Code: 100% decoupled from any API / passwords.
+#   - Dynamic In-Memory Inventory: Injects server names passed from ServiceNow.
+#   - Input format expected from ServiceNow: Comma-separated (e.g. "node1,node2,master")
+#   - Audits all selected targets in parallel.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Play 1: Dynamically construct in-memory inventory group from ServiceNow
+# Play 1: Register comma-separated target hosts into dynamic execution group
 # -----------------------------------------------------------------------------
 - name: 1. Build Runtime Dynamic Inventory from ServiceNow
   hosts: localhost
@@ -25,27 +22,22 @@
       ansible.builtin.assert:
         that:
           - raw_targets | string | trim | length > 0
-        fail_msg: "Mandatory parameter 'target_server' (or 'target_host') was not provided by ServiceNow."
+        fail_msg: "Mandatory parameter 'target_server' was not provided."
 
-    - name: 1.2 Parse comma-separated or space-separated targets into clean list
+    - name: 1.2 Split comma-separated server names into execution list
       ansible.builtin.set_fact:
-        target_list: >-
-          {{
-            raw_targets if raw_targets is iterable and raw_targets is not string
-            else (raw_targets | string | replace(' ', ',') | split(','))
-          }}
+        target_list: "{{ raw_targets | string | split(',') | map('trim') | reject('equalto', '') | list }}"
 
     - name: 1.3 Register each server into dynamic runtime execution group
       ansible.builtin.add_host:
-        name: "{{ item | trim }}"
+        name: "{{ item }}"
         groups: dynamic_targets
         ansible_ssh_timeout: 15
       loop: "{{ target_list }}"
-      when: item | trim | length > 0
 
-    - name: 1.4 Display dynamically registered hosts for this run
+    - name: 1.4 Display targets registered for this audit run
       ansible.builtin.debug:
-        msg: "Dynamically registered {{ groups['dynamic_targets'] | length }} target(s) for audit: {{ groups['dynamic_targets'] }}"
+        msg: "Dynamically registered {{ groups['dynamic_targets'] | length }} target(s): {{ groups['dynamic_targets'] }}"
 
 # -----------------------------------------------------------------------------
 # Play 2: Audit all dynamic targets in parallel using nmon_check role
