@@ -1,0 +1,10 @@
+---
+# =============================================================================
+# ServiceNow Collection Requirements
+# For ServiceNow CMDB sync and Service Catalog integration
+# Install along with requirements-core.yml for full ServiceNow automation
+# =============================================================================
+collections:
+  - name: servicenow.itsm
+    version: ">=2.2.0"
+    source: https://galaxy.ansible.com

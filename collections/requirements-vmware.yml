@@ -1,0 +1,10 @@
+---
+# =============================================================================
+# VMware Collection Requirements
+# For VMware VM provisioning and management
+# Install along with requirements-core.yml for full VMware automation
+# =============================================================================
+collections:
+  - name: community.vmware
+    version: ">=3.8.0"
+    source: https://galaxy.ansible.com

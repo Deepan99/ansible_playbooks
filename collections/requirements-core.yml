@@ -1,0 +1,14 @@
+---
+# =============================================================================
+# Core Collection Requirements
+# For general system operations: firewall, storage, services, sysctl
+# Use this for most day-to-day automation tasks
+# =============================================================================
+collections:
+  - name: ansible.posix
+    version: ">=1.5.4"
+    source: https://galaxy.ansible.com
+
+  - name: community.general
+    version: ">=8.0.0"
+    source: https://galaxy.ansible.com

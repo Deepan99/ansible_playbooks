@@ -1,8 +1,24 @@
 ---
 # =============================================================================
-# Ansible Galaxy Collection Requirements
-# Install via: ansible-galaxy collection install -r collections/requirements.yml
+# Ansible Galaxy Collection Requirements (Legacy - All Collections)
+# ============================================================================
+# This file includes ALL collections. For faster AWX sync, use split files:
+#
+# - requirements-core.yml        (ansible.posix, community.general)
+# - requirements-azure.yml        (azure.azcollection)
+# - requirements-aws.yml          (amazon.aws)
+# - requirements-vmware.yml       (community.vmware)
+# - requirements-servicenow.yml    (servicenow.itsm)
+#
+# Usage Examples:
+# ansible-galaxy collection install -r collections/requirements-core.yml
+# ansible-galaxy collection install -r collections/requirements-core.yml -r collections/requirements-azure.yml
+#
+# AWX Configuration:
+# Set AWX project to use requirements-core.yml for 66% faster syncs.
+# Only add cloud-specific requirements when needed.
 # =============================================================================
+
 collections:
   - name: ansible.posix
     version: ">=1.5.4"

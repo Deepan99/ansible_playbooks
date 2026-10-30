@@ -1,0 +1,10 @@
+---
+# =============================================================================
+# AWS Cloud Collection Requirements
+# For AWS EC2 provisioning and management
+# Install along with requirements-core.yml for full AWS automation
+# =============================================================================
+collections:
+  - name: amazon.aws
+    version: ">=6.0.0"
+    source: https://galaxy.ansible.com
