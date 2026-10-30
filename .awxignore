@@ -1,0 +1,34 @@
+# =============================================================================
+# AWX Project Sync Exclusions
+# This file tells AWX which files/directories to skip during project sync
+# =============================================================================
+
+# Documentation
+docs/
+
+# Development tools and CI/CD
+.github/
+.pre-commit-config.yaml
+.ansible-lint
+
+# Web applications and tools
+tools/
+fastapi-app/
+app.js
+index.html
+style.css
+
+# Temporary directories and logs
+logs_temp*/
+*.log
+
+# Backup files
+*.remote.bak
+*.bak
+
+# Development/Local files
+ansible_rbac_guide.md
+
+# Markdown documentation files (keep only if needed for runtime)
+*.md
+!README.md
