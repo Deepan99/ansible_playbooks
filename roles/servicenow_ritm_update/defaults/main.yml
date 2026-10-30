@@ -1,0 +1,8 @@
+---
+# Default variables for servicenow_ritm_update role
+# Credentials should be set via AWX environment variables
+sn_instance: "{{ lookup('env', 'SN_INSTANCE') }}"
+sn_username: "{{ lookup('env', 'SN_USERNAME') }}"
+sn_password: "{{ lookup('env', 'SN_PASSWORD') }}"
+ritm_id: "{{ ritm_number | default('') }}"
+assignment_group_name: "Linux Support"

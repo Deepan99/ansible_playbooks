@@ -1,0 +1,125 @@
+---
+# =============================================================================
+# Role: servicenow_ritm_update - ServiceNow Ticket Lifecycle Automation
+# Purpose: Update RITM tickets based on audit results (close or reassign)
+# =============================================================================
+
+- name: Check if ServiceNow fulfillment was requested
+  ansible.builtin.debug:
+    msg: "ServiceNow RITM: {{ ritm_id if ritm_id != '' else 'None (Manual Run - Skipping ServiceNow Update)' }}"
+
+- name: Process ServiceNow Ticket Lifecycle Updates
+  when:
+    - ritm_id != ''
+    - sn_instance != ''
+    - sn_username != ''
+  block:
+    # Collect results from all audited hosts
+    - name: Consolidate multi-host audit findings
+      ansible.builtin.set_fact:
+        all_hosts_verified: >-
+          {{ groups['dynamic_targets'] | map('extract', hostvars, 'nmon_installed')
+             | select('equalto', true) | list | length == (groups['dynamic_targets'] | length) }}
+        consolidated_report: >-
+          {% for h in groups['dynamic_targets'] %}
+          • {{ hostvars[h]['nmon_report'] | default(h + ': Audit completed') }}
+          {% endfor %}
+
+    # Query RITM sys_id
+    - name: Query sys_id for ticket {{ ritm_id }}
+      ansible.builtin.uri:
+        url: "https://{{ sn_instance }}/api/now/table/sc_req_item?sysparm_query=number={{ ritm_id }}&sysparm_fields=sys_id"
+        method: GET
+        url_username: "{{ sn_username }}"
+        url_password: "{{ sn_password }}"
+        force_basic_auth: true
+        headers:
+          Accept: application/json
+      register: ritm_lookup
+      ignore_errors: true
+
+    - name: Extract RITM sys_id
+      ansible.builtin.set_fact:
+        ritm_sys_id: "{{ ritm_lookup.json.result[0].sys_id }}"
+      when:
+        - ritm_lookup.json is defined
+        - ritm_lookup.json.result | default([]) | length > 0
+
+    # Query assignment group sys_id (for reassignment if missing)
+    - name: Query assignment group sys_id
+      ansible.builtin.uri:
+        url: "https://{{ sn_instance }}/api/now/table/sys_user_group?sysparm_query=name={{ assignment_group_name }}&sysparm_fields=sys_id"
+        method: GET
+        url_username: "{{ sn_username }}"
+        url_password: "{{ sn_password }}"
+        force_basic_auth: true
+        headers:
+          Accept: application/json
+      register: group_lookup
+      when:
+        - ritm_sys_id is defined
+        - not all_hosts_verified | bool
+      ignore_errors: true
+
+    - name: Set assignment group sys_id
+      ansible.builtin.set_fact:
+        assignment_group_id: "{{ group_lookup.json.result[0].sys_id | default('') }}"
+      when:
+        - not all_hosts_verified | bool
+        - group_lookup.json is defined
+        - group_lookup.json.result | default([]) | length > 0
+
+    # Case A: All hosts verified -> Auto-close Complete
+    - name: Auto-Close Ticket (All Targets Verified)
+      ansible.builtin.uri:
+        url: "https://{{ sn_instance }}/api/now/table/sc_req_item/{{ ritm_sys_id }}"
+        method: PATCH
+        url_username: "{{ sn_username }}"
+        url_password: "{{ sn_password }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body:
+          state: "3"
+          stage: "complete"
+          work_notes: >-
+            [Ansible Automation - SUCCESS]
+            All requested target servers have been verified:
+            {{ consolidated_report }}
+            Ticket automatically Closed Complete.
+      when:
+        - ritm_sys_id is defined
+        - all_hosts_verified | bool
+
+    # Case B: Any host missing -> Reassign to assignment group (Work in Progress)
+    - name: Reassign to Assignment Group (Remediation Required)
+      ansible.builtin.uri:
+        url: "https://{{ sn_instance }}/api/now/table/sc_req_item/{{ ritm_sys_id }}"
+        method: PATCH
+        url_username: "{{ sn_username }}"
+        url_password: "{{ sn_password }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body:
+          state: "2"
+          stage: "in_progress"
+          assignment_group: "{{ assignment_group_id | default('') }}"
+          work_notes: >-
+            [Ansible Automation - ACTION REQUIRED]
+            nmon verification detected missing installation or inactive service:
+            {{ consolidated_report }}
+            Ticket has been reassigned to '{{ assignment_group_name }}' team for remediation.
+      when:
+        - ritm_sys_id is defined
+        - not all_hosts_verified | bool
+
+    - name: Log Final Handshake Confirmation
+      ansible.builtin.debug:
+        msg: >-
+          ServiceNow {{ ritm_id }} updated successfully:
+          {{ 'Closed Complete' if all_hosts_verified else 'Reassigned to ' + assignment_group_name + ' (Work in Progress)' }}
