@@ -6,16 +6,40 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+# 0. OS Detection
+# -----------------------------------------------------------------------------
+- name: 0.1 Detect init system
+  ansible.builtin.set_fact:
+    init_system: >-
+      {{ 'systemd'
+         if (ansible_facts['os_family'] in ['RedHat', 'Debian'])
+         else 'other' }}
+  when: ansible_facts['os_family'] is defined
+
+# -----------------------------------------------------------------------------
 # 1. Installation Status Check
 # -----------------------------------------------------------------------------
-- name: 1.1 Inspect filesystem for nmon binary
+- name: 1.1 Detect nmon binary from multiple possible paths
   ansible.builtin.stat:
-    path: "{{ nmon_binary_path }}"
+    path: "{{ item }}"
   register: nmon_stat
+  loop: "{{ nmon_binary_paths }}"
+  failed_when: false
+  changed_when: false
 
-- name: 1.2 Set installation flag
+- name: 1.2 Set installation flag and binary path
   ansible.builtin.set_fact:
-    nmon_installed: "{{ nmon_stat.stat.exists | default(false) }}"
+    nmon_installed: "{{ item.stat.exists | default(false) }}"
+    nmon_binary_path: "{{ item.item }}"
+  loop: "{{ nmon_stat.results }}"
+  when: item.stat.exists | default(false)
+  run_once: true
+
+- name: 1.3 Set installation flag to false if not found
+  ansible.builtin.set_fact:
+    nmon_installed: false
+    nmon_binary_path: "{{ nmon_binary_paths[0] }}"
+  when: nmon_installed is not defined
 
 # -----------------------------------------------------------------------------
 # 2. Version Detection (Executed if installed)
@@ -29,13 +53,19 @@
 
 - name: 2.2 Parse version fact
   ansible.builtin.set_fact:
-    nmon_version: "{{ (nmon_version_cmd.stdout_lines | first | default('Unknown')) if nmon_installed else 'Not Installed' }}"
+    nmon_version: >-
+      {{ (nmon_version_cmd.stdout_lines | first | default('Unknown'))
+         if (nmon_installed and nmon_version_cmd.stdout_lines | length > 0)
+         else 'Not Installed' }}
 
 # -----------------------------------------------------------------------------
 # 3. Running Status Check (Dual-mode: systemd service + background process)
 # -----------------------------------------------------------------------------
-- name: 3.1 Collect systemd service facts
+- name: 3.1 Collect systemd service facts (if systemd detected)
   ansible.builtin.service_facts:
+  register: service_facts_result
+  failed_when: false
+  when: init_system == 'systemd'
 
 - name: 3.2 Check background process table for nmon
   ansible.builtin.command: pgrep -x nmon
@@ -47,11 +77,16 @@
   ansible.builtin.set_fact:
     nmon_running: >-
       {{ (ansible_facts.services['nmon.service']['state'] == 'running')
-         if ('nmon.service' in ansible_facts.services)
+         if (init_system == 'systemd'
+            and ansible_facts.services is defined
+            and 'nmon.service' in ansible_facts.services)
          else (nmon_proc_cmd.rc == 0) }}
     nmon_running_mode: >-
       {{ 'systemd service'
-         if ('nmon.service' in ansible_facts.services and ansible_facts.services['nmon.service']['state'] == 'running')
+         if (init_system == 'systemd'
+            and ansible_facts.services is defined
+            and 'nmon.service' in ansible_facts.services
+            and ansible_facts.services['nmon.service']['state'] == 'running')
          else ('background process' if nmon_proc_cmd.rc == 0 else 'inactive') }}
 
 # -----------------------------------------------------------------------------

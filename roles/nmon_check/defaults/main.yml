@@ -1,4 +1,9 @@
 ---
 # Default variables for nmon_check role
-nmon_binary_path: /usr/bin/nmon
+nmon_binary_paths:
+  - /usr/bin/nmon
+  - /usr/local/bin/nmon
+  - /opt/nmon/nmon
+  - /usr/local/nmon/nmon
 nmon_package_name: nmon
+nmon_check_become: false

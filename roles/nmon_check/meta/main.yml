@@ -1,0 +1,37 @@
+---
+galaxy_info:
+  author: Deepan
+  description: Nmon monitoring and health check role - audits installation, version, and running status
+  company: Enterprise Automation
+  license: MIT
+  min_ansible_version: "2.9"
+
+  platforms:
+    - name: EL
+      versions:
+        - 7
+        - 8
+        - 9
+    - name: Ubuntu
+      versions:
+        - bionic
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+    - name: Solaris
+      versions:
+        - 11
+
+  galaxy_tags:
+    - monitoring
+    - performance
+    - nmon
+    - health-check
+    - audit
+    - system
+    - status
+
+dependencies: []

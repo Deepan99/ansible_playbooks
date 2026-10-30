@@ -1,0 +1,3 @@
+---
+# Handlers for nmon_check role
+# Currently no handlers needed as this is a read-only audit role
