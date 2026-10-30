@@ -1,42 +1,54 @@
 ---
 # =============================================================================
-# Playbook: Verify nmon Performance Monitoring Tool
+# Playbook: Verify nmon Performance Monitoring Tool (Multi-Server Enterprise)
 #
-# Production Features:
-#   - Dynamic Inventory: Target host injected dynamically from ServiceNow Catalog
-#   - Zero static inventories required in AWX
-#   - 100% decoupled from ServiceNow API (Pure infrastructure inspection)
-#   - Dual-mode running status (systemd service + background daemon)
-#   - Exposes nmon_installed, nmon_version, nmon_running, nmon_report via set_stats
+# Production Design:
+#   - Zero Static Inventory in AWX: AWX inventory has 0 hosts.
+#   - Runtime In-Memory Grouping: Injects multiple servers passed from ServiceNow.
+#   - Supports: Comma-separated ('node1,node2'), list, or single host.
+#   - Pure Infrastructure Logic: 100% decoupled from ServiceNow APIs.
 #
 # Usage:
-#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_server=node1"
-#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_host=node1"
+#   ansible-playbook playbooks/operations/check_nmon.yml -e "target_server=node1,node2,master"
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Play 1: Dynamically register target server from ServiceNow Service Catalog
+# Play 1: Dynamically construct in-memory inventory group from ServiceNow
 # -----------------------------------------------------------------------------
-- name: 1. Dynamically Register ServiceNow Target Host
+- name: 1. Build Runtime Dynamic Inventory from ServiceNow
   hosts: localhost
   gather_facts: false
   vars:
-    resolved_target: "{{ target_server | default(target_host | default('')) }}"
+    raw_targets: "{{ target_server | default(target_host | default('')) }}"
   tasks:
-    - name: 1.1 Validate target server parameter
+    - name: 1.1 Validate incoming target parameter
       ansible.builtin.assert:
         that:
-          - resolved_target | length > 0
+          - raw_targets | string | trim | length > 0
         fail_msg: "Mandatory parameter 'target_server' (or 'target_host') was not provided by ServiceNow."
 
-    - name: 1.2 Add target server to dynamic in-memory execution inventory
+    - name: 1.2 Parse comma-separated or space-separated targets into clean list
+      ansible.builtin.set_fact:
+        target_list: >-
+          {{
+            raw_targets if raw_targets is iterable and raw_targets is not string
+            else (raw_targets | string | replace(' ', ',') | split(','))
+          }}
+
+    - name: 1.3 Register each server into dynamic runtime execution group
       ansible.builtin.add_host:
-        name: "{{ resolved_target }}"
+        name: "{{ item | trim }}"
         groups: dynamic_targets
         ansible_ssh_timeout: 15
+      loop: "{{ target_list }}"
+      when: item | trim | length > 0
+
+    - name: 1.4 Display dynamically registered hosts for this run
+      ansible.builtin.debug:
+        msg: "Dynamically registered {{ groups['dynamic_targets'] | length }} target(s) for audit: {{ groups['dynamic_targets'] }}"
 
 # -----------------------------------------------------------------------------
-# Play 2: Audit target server using modular nmon_check role
+# Play 2: Audit all dynamic targets in parallel using nmon_check role
 # -----------------------------------------------------------------------------
 - name: 2. Audit nmon Installation, Version, and Running Status
   hosts: dynamic_targets
